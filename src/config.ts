@@ -1,19 +1,27 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
-import { SecretsSchema, ConfigSchema, type Secrets, type Config } from './schemas/index.js';
+import { SecretsSchema, ConfigSchema, type Secrets, type Config, type LLMCapability, type CapabilityModelMapping } from './schemas/index.js';
 
 const DOBBIE_DIR = path.join(os.homedir(), '.dobbie');
 const SECRETS_PATH = path.join(DOBBIE_DIR, 'secrets.json');
 const CONFIG_PATH = path.join(DOBBIE_DIR, 'config.json');
 
-// Default configuration
+// Default configuration with capability-based mapping
+// Using OpenAI models with cost-conscious selection:
+// - GPT-4o: Complex reasoning, general chat (~$2.50/1M input, $10/1M output)
+// - GPT-4o-mini: Simple tasks (~$0.15/1M input, $0.60/1M output) - 15x cheaper!
+// - text-embedding-3-small: Embeddings (~$0.02/1M tokens)
 const DEFAULT_CONFIG: Config = {
-    taskModelMapping: {
-        today: { provider: 'claude', model: 'claude-sonnet-4-20250514' },
-        remember: { provider: 'claude', model: 'claude-3-5-haiku-20241022' },
+    capabilityMapping: {
+        reason: { provider: 'openai', model: 'gpt-4o' },           // Complex thinking needs full power
+        summarize: { provider: 'openai', model: 'gpt-4o-mini' },   // Summarizing is straightforward
+        categorize: { provider: 'openai', model: 'gpt-4o-mini' },  // Classification is simple
+        format: { provider: 'openai', model: 'gpt-4o-mini' },      // Text formatting is simple
+        chat: { provider: 'openai', model: 'gpt-4o' },             // General chat, good quality
+        embed: { provider: 'openai', model: 'text-embedding-3-small' },
     },
-    defaultProvider: 'claude',
+    defaultProvider: 'openai',
 };
 
 const DEFAULT_SECRETS: Secrets = {
@@ -65,14 +73,14 @@ export async function setApiKey(provider: string, apiKey: string): Promise<void>
     await saveSecrets(secrets);
 }
 
-export async function getTaskModel(task: string): Promise<{ provider: string; model: string } | null> {
+export async function getCapabilityModel(capability: LLMCapability): Promise<CapabilityModelMapping | null> {
     const config = await loadConfig();
-    return config.taskModelMapping[task] ?? null;
+    return config.capabilityMapping[capability] ?? null;
 }
 
-export async function setTaskModel(task: string, provider: string, model: string): Promise<void> {
+export async function setCapabilityModel(capability: LLMCapability, provider: string, model: string): Promise<void> {
     const config = await loadConfig();
-    config.taskModelMapping[task] = { provider, model };
+    config.capabilityMapping[capability] = { provider, model };
     await saveConfig(config);
 }
 

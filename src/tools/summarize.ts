@@ -1,15 +1,15 @@
 import type { Tool } from './types.js';
 import { registerTool } from './types.js';
-import { getModelForTask, createDobbieSystemPrompt } from '../llm/router.js';
+import { getModelForCapability, createDobbieSystemPrompt } from '../llm/router.js';
 
 export const summarizeTool: Tool = {
     name: 'summarize',
     description: 'Summarizes text using AI',
     type: 'ai',
-    model: 'remember',  // Uses the model configured for 'remember' task
+    capability: 'summarize',
 
     async execute(input: string, context: string[] = []): Promise<string> {
-        const llm = await getModelForTask(this.model!);
+        const llm = await getModelForCapability('summarize');
         const contextString = context.join('\n\n---\n\n');
         const systemPrompt = createDobbieSystemPrompt(contextString);
 

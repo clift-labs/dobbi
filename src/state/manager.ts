@@ -4,16 +4,62 @@ import { StateSchema, type State } from '../schemas/index.js';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 
-// Get the dobbie root directory (where the package.json is)
-function getDobbieRoot(): string {
-    // This will be set when building, for now use cwd or find package.json
-    return process.env.DOBBIE_ROOT || process.cwd();
-}
-
+const SOCKS_FILE = '.socks.md';
 const STATE_FILE = '.state.json';
 
-function getStatePath(): string {
-    return path.join(getDobbieRoot(), STATE_FILE);
+let cachedVaultRoot: string | null = null;
+
+/**
+ * Finds the vault root by looking for .socks.md in cwd or parent directories.
+ * Returns null if no vault is found.
+ */
+export async function findVaultRoot(): Promise<string | null> {
+    if (cachedVaultRoot) {
+        return cachedVaultRoot;
+    }
+
+    let currentDir = process.cwd();
+
+    while (currentDir !== path.dirname(currentDir)) {
+        const socksPath = path.join(currentDir, SOCKS_FILE);
+        try {
+            await fs.access(socksPath);
+            cachedVaultRoot = currentDir;
+            return currentDir;
+        } catch {
+            // No .socks.md here, try parent
+            currentDir = path.dirname(currentDir);
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Gets the vault root, throwing an error if not in a vault.
+ */
+export async function getVaultRoot(): Promise<string> {
+    const root = await findVaultRoot();
+
+    if (!root) {
+        console.error(chalk.red('\n🧝 Dobbie cannot find a vault here, sir.'));
+        console.error(chalk.gray('This directory does not contain a .socks.md file.'));
+        console.error(chalk.gray('\nTo create a new vault, run: dobbie init'));
+        process.exit(1);
+    }
+
+    return root;
+}
+
+/**
+ * Checks if the current directory is a valid vault.
+ */
+export async function isInVault(): Promise<boolean> {
+    return (await findVaultRoot()) !== null;
+}
+
+function getStatePath(vaultRoot: string): string {
+    return path.join(vaultRoot, STATE_FILE);
 }
 
 const DEFAULT_STATE: State = {
@@ -23,7 +69,8 @@ const DEFAULT_STATE: State = {
 
 export async function loadState(): Promise<State> {
     try {
-        const data = await fs.readFile(getStatePath(), 'utf-8');
+        const vaultRoot = await getVaultRoot();
+        const data = await fs.readFile(getStatePath(vaultRoot), 'utf-8');
         return StateSchema.parse(JSON.parse(data));
     } catch {
         return DEFAULT_STATE;
@@ -31,8 +78,9 @@ export async function loadState(): Promise<State> {
 }
 
 export async function saveState(state: State): Promise<void> {
+    const vaultRoot = await getVaultRoot();
     state.lastUsed = new Date().toISOString().split('T')[0];
-    await fs.writeFile(getStatePath(), JSON.stringify(state, null, 2));
+    await fs.writeFile(getStatePath(vaultRoot), JSON.stringify(state, null, 2));
 }
 
 export async function getActiveProject(): Promise<string | null> {
@@ -93,7 +141,8 @@ export async function requireProject(): Promise<string> {
 }
 
 export async function listProjects(): Promise<string[]> {
-    const projectsDir = path.join(getDobbieRoot(), 'projects');
+    const vaultRoot = await getVaultRoot();
+    const projectsDir = path.join(vaultRoot, 'projects');
 
     try {
         const entries = await fs.readdir(projectsDir, { withFileTypes: true });
@@ -106,7 +155,8 @@ export async function listProjects(): Promise<string[]> {
 }
 
 export async function createProject(name: string): Promise<void> {
-    const projectDir = path.join(getDobbieRoot(), 'projects', name);
+    const vaultRoot = await getVaultRoot();
+    const projectDir = path.join(vaultRoot, 'projects', name);
 
     // Create project directories
     await fs.mkdir(path.join(projectDir, 'notes'), { recursive: true });
@@ -153,7 +203,8 @@ tags: [context, ${folder}]
 }
 
 export async function projectExists(name: string): Promise<boolean> {
-    const projectDir = path.join(getDobbieRoot(), 'projects', name);
+    const vaultRoot = await getVaultRoot();
+    const projectDir = path.join(vaultRoot, 'projects', name);
     try {
         const stat = await fs.stat(projectDir);
         return stat.isDirectory();
@@ -162,6 +213,9 @@ export async function projectExists(name: string): Promise<boolean> {
     }
 }
 
-export function getDobbieRootPath(): string {
-    return getDobbieRoot();
+/**
+ * @deprecated Use getVaultRoot() instead
+ */
+export async function getDobbieRootPath(): Promise<string> {
+    return getVaultRoot();
 }

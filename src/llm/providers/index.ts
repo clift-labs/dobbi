@@ -1,10 +1,12 @@
 import type { LLMProvider } from '../types.js';
 import { createClaudeProvider } from './claude.js';
+import { createOpenAIProvider } from './openai.js';
 
 const providers: Map<string, (modelId?: string) => LLMProvider> = new Map();
 
 // Register built-in providers
 providers.set('claude', createClaudeProvider);
+providers.set('openai', createOpenAIProvider);
 
 export function registerProvider(
     name: string,

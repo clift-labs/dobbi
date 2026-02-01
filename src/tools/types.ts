@@ -1,8 +1,10 @@
+import type { LLMCapability } from '../schemas/index.js';
+
 export interface Tool {
     name: string;
     description: string;
     type: 'deterministic' | 'ai';
-    model?: string;  // Task name for model lookup (if type === 'ai')
+    capability?: LLMCapability;  // Which capability to use (if type === 'ai')
     execute(input: string, context?: string[]): Promise<string>;
 }
 

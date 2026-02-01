@@ -7,6 +7,14 @@ dist/
 # Local state (not synced)
 .state.json
 
+# Vault files (don't use source repo as vault)
+.socks.md
+projects/
+daily/
+schedule/
+todos/
+global/
+
 # OS files
 .DS_Store
 

@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { getDobbieRootPath } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 
 const execAsync = promisify(exec);
 
@@ -12,9 +12,10 @@ export const syncCommand = new Command('sync')
     .option('-m, --message <message>', 'Commit message', 'Dobbie synced notes')
     .action(async (options: { message: string }) => {
         const spinner = ora('Dobbie is syncing with GitHub, sir...').start();
-        const cwd = getDobbieRootPath();
 
         try {
+            const cwd = await getVaultRoot();
+
             // Pull first
             spinner.text = 'Pulling latest changes...';
             try {

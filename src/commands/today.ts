@@ -3,9 +3,9 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { getActiveProject, getDobbieRootPath } from '../state/manager.js';
+import { getActiveProject, getVaultRoot } from '../state/manager.js';
 import { getContextString } from '../context/reader.js';
-import { getModelForTask, createDobbieSystemPrompt } from '../llm/router.js';
+import { getModelForCapability, createDobbieSystemPrompt } from '../llm/router.js';
 
 export const todayCommand = new Command('today')
     .description('Show daily todos and notes')
@@ -13,7 +13,7 @@ export const todayCommand = new Command('today')
         const spinner = ora('Dobbie is gathering your tasks, sir...').start();
 
         try {
-            const dobbieRoot = getDobbieRootPath();
+            const vaultRoot = await getVaultRoot();
             const today = new Date().toISOString().split('T')[0];
             const dayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
@@ -21,7 +21,7 @@ export const todayCommand = new Command('today')
             const activeProject = await getActiveProject();
 
             // Gather global todos
-            const globalTodosPath = path.join(dobbieRoot, 'todos');
+            const globalTodosPath = path.join(vaultRoot, 'global', 'todos');
             let globalTodos = '';
             try {
                 const files = await fs.readdir(globalTodosPath);
@@ -36,7 +36,7 @@ export const todayCommand = new Command('today')
             }
 
             // Gather schedule
-            const schedulePath = path.join(dobbieRoot, 'schedule');
+            const schedulePath = path.join(vaultRoot, 'global', 'schedule');
             let schedule = '';
             try {
                 const files = await fs.readdir(schedulePath);
@@ -53,7 +53,7 @@ export const todayCommand = new Command('today')
             // Gather project todos if active
             let projectTodos = '';
             if (activeProject) {
-                const projectTodosPath = path.join(dobbieRoot, 'projects', activeProject, 'todos');
+                const projectTodosPath = path.join(vaultRoot, 'projects', activeProject, 'todos');
                 try {
                     const files = await fs.readdir(projectTodosPath);
                     for (const file of files) {
@@ -81,8 +81,8 @@ export const todayCommand = new Command('today')
 
             // Try to use AI to summarize
             try {
-                const context = await getContextString(dobbieRoot);
-                const llm = await getModelForTask('today');
+                const context = await getContextString(vaultRoot);
+                const llm = await getModelForCapability('summarize');
                 const systemPrompt = createDobbieSystemPrompt(context);
 
                 const prompt = `Please provide a helpful summary of today's tasks and schedule for the user. Be concise and prioritize the most important items.

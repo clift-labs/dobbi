@@ -1,29 +1,38 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { getDobbieRootPath } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 
 const SOCKS_FILE = '.socks.md';
 
 /**
- * Reads .socks.md files from the target path up to the dobbie root.
+ * Reads a single .socks.md file if it exists.
+ * Returns the content or null if not found.
+ */
+async function readSocksFile(dirPath: string): Promise<string | null> {
+    const socksPath = path.join(dirPath, SOCKS_FILE);
+    try {
+        return await fs.readFile(socksPath, 'utf-8');
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Reads .socks.md files from the target path up to the vault root.
  * Returns an array of context strings, ordered from deepest to root.
  */
 export async function buildContextChain(targetPath: string): Promise<string[]> {
-    const dobbieRoot = getDobbieRootPath();
+    const vaultRoot = await getVaultRoot();
     const contexts: string[] = [];
 
     let currentPath = path.resolve(targetPath);
-    const rootPath = path.resolve(dobbieRoot);
+    const rootPath = path.resolve(vaultRoot);
 
     // Walk up the directory tree
     while (currentPath.startsWith(rootPath)) {
-        const socksPath = path.join(currentPath, SOCKS_FILE);
-
-        try {
-            const content = await fs.readFile(socksPath, 'utf-8');
+        const content = await readSocksFile(currentPath);
+        if (content) {
             contexts.push(content);
-        } catch {
-            // No .socks.md in this directory, continue
         }
 
         // Move to parent
@@ -39,6 +48,7 @@ export async function buildContextChain(targetPath: string): Promise<string[]> {
 
 /**
  * Gets the full context chain as a single formatted string.
+ * Order: root (broadest) to target (most specific).
  */
 export async function getContextString(targetPath: string): Promise<string> {
     const contexts = await buildContextChain(targetPath);
@@ -57,6 +67,78 @@ export async function getContextString(targetPath: string): Promise<string> {
  * Gets the context for the current active project.
  */
 export async function getProjectContext(projectName: string): Promise<string> {
-    const projectPath = path.join(getDobbieRootPath(), 'projects', projectName);
+    const vaultRoot = await getVaultRoot();
+    const projectPath = path.join(vaultRoot, 'projects', projectName);
     return getContextString(projectPath);
+}
+
+/**
+ * Gets the context for notes in a project.
+ * Gathers .socks.md files in this order (broadest to most specific):
+ * 1. .socks.md (root)
+ * 2. projects/.socks.md
+ * 3. projects/{project}/.socks.md
+ * 4. projects/{project}/notes/.socks.md
+ */
+export async function getNotesContext(projectName: string): Promise<string> {
+    const vaultRoot = await getVaultRoot();
+    const contexts: string[] = [];
+
+    // Define the hierarchy from root to notes (broadest to most specific)
+    const hierarchy = [
+        vaultRoot,                                           // .socks.md
+        path.join(vaultRoot, 'projects'),                    // projects/.socks.md
+        path.join(vaultRoot, 'projects', projectName),       // projects/{project}/.socks.md
+        path.join(vaultRoot, 'projects', projectName, 'notes') // projects/{project}/notes/.socks.md
+    ];
+
+    for (const dirPath of hierarchy) {
+        const content = await readSocksFile(dirPath);
+        if (content) {
+            contexts.push(content);
+        }
+    }
+
+    return contexts.join('\n\n---\n\n');
+}
+
+/**
+ * Gets context for a specific subdirectory within a project.
+ * Gathers .socks.md files in this order (broadest to most specific):
+ * 1. .socks.md (root)
+ * 2. projects/.socks.md
+ * 3. projects/{project}/.socks.md
+ * 4. projects/{project}/{subdirectory}/.socks.md
+ *
+ * @param projectName - The project name
+ * @param subdirectory - The subdirectory within the project (e.g., 'notes', 'research', 'todos')
+ */
+export async function getSubdirectoryContext(projectName: string, subdirectory: string): Promise<string> {
+    const vaultRoot = await getVaultRoot();
+    const contexts: string[] = [];
+
+    // Define the hierarchy from root to subdirectory (broadest to most specific)
+    const hierarchy = [
+        vaultRoot,                                              // .socks.md
+        path.join(vaultRoot, 'projects'),                       // projects/.socks.md
+        path.join(vaultRoot, 'projects', projectName),          // projects/{project}/.socks.md
+        path.join(vaultRoot, 'projects', projectName, subdirectory) // projects/{project}/{subdirectory}/.socks.md
+    ];
+
+    for (const dirPath of hierarchy) {
+        const content = await readSocksFile(dirPath);
+        if (content) {
+            contexts.push(content);
+        }
+    }
+
+    return contexts.join('\n\n---\n\n');
+}
+
+/**
+ * Gets the context for todos in a project.
+ * Convenience wrapper for getSubdirectoryContext.
+ */
+export async function getTodosContext(projectName: string): Promise<string> {
+    return getSubdirectoryContext(projectName, 'todos');
 }

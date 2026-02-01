@@ -1,16 +1,25 @@
-import { getTaskModel } from '../config.js';
+import { getCapabilityModel } from '../config.js';
 import { getProvider } from './providers/index.js';
 import type { LLMProvider } from './types.js';
+import type { LLMCapability } from '../schemas/index.js';
 
 /**
- * Gets the appropriate LLM provider for a given task.
+ * Gets the appropriate LLM provider for a given capability.
+ * 
+ * Capabilities:
+ * - reason: Complex thinking, multi-step logic (Claude Opus, GPT-4)
+ * - summarize: Condensing, prioritizing info (Claude Sonnet)
+ * - categorize: Classification, tagging (fast models like Haiku)
+ * - format: Markdown, text cleanup (fast models)
+ * - chat: General conversation (default provider)
+ * - embed: Vector embeddings (OpenAI embeddings)
  */
-export async function getModelForTask(task: string): Promise<LLMProvider> {
-    const mapping = await getTaskModel(task);
+export async function getModelForCapability(capability: LLMCapability): Promise<LLMProvider> {
+    const mapping = await getCapabilityModel(capability);
 
     if (!mapping) {
         throw new Error(
-            `No model configured for task '${task}', sir. Please run 'dobbie config set-model ${task} <provider> <model>'`
+            `No model configured for capability '${capability}', sir. Please run 'dobbie config set-capability ${capability} <provider> <model>'`
         );
     }
 

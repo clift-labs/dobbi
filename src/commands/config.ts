@@ -5,10 +5,11 @@ import {
     loadConfig,
     loadSecrets,
     setApiKey,
-    setTaskModel,
+    setCapabilityModel,
     getApiKey,
 } from '../config.js';
 import { listProviders } from '../llm/providers/index.js';
+import { LLM_CAPABILITIES, type LLMCapability } from '../schemas/index.js';
 
 export const configCommand = new Command('config')
     .description('Manage configuration and secrets');
@@ -24,10 +25,10 @@ configCommand
         console.log(chalk.bold('Default Provider:'), config.defaultProvider);
         console.log('');
 
-        console.log(chalk.bold('Task → Model Mapping:'));
-        for (const [task, mapping] of Object.entries(config.taskModelMapping)) {
+        console.log(chalk.bold('Capability → Model Mapping:'));
+        for (const [capability, mapping] of Object.entries(config.capabilityMapping)) {
             const m = mapping as { provider: string; model: string };
-            console.log(chalk.gray(`  ${task}: ${m.provider}/${m.model}`));
+            console.log(chalk.gray(`  ${capability}: ${m.provider}/${m.model}`));
         }
         console.log('');
 
@@ -80,16 +81,43 @@ configCommand
         console.log(chalk.green(`\n✓ API key for ${name} saved, sir!`));
     });
 
-// Set model mapping
+// Set capability model
 configCommand
-    .command('set-model <task> <provider> <model>')
-    .description('Set which model to use for a task')
-    .action(async (task: string, provider: string, model: string) => {
-        await setTaskModel(task, provider, model);
-        console.log(chalk.green(`✓ Task "${task}" will now use ${provider}/${model}, sir!`));
+    .command('set-capability <capability> <provider> <model>')
+    .description('Set which model to use for a capability (reason, summarize, categorize, format, chat, embed)')
+    .action(async (capability: string, provider: string, model: string) => {
+        if (!LLM_CAPABILITIES.includes(capability as LLMCapability)) {
+            console.log(chalk.red(`Unknown capability: ${capability}`));
+            console.log(chalk.gray(`Valid capabilities: ${LLM_CAPABILITIES.join(', ')}`));
+            return;
+        }
+        await setCapabilityModel(capability as LLMCapability, provider, model);
+        console.log(chalk.green(`✓ Capability "${capability}" will now use ${provider}/${model}, sir!`));
     });
 
-// List models
+// List capabilities
+configCommand
+    .command('list-capabilities')
+    .description('List LLM capability categories')
+    .action(() => {
+        console.log(chalk.cyan('\n🧠 LLM Capabilities:\n'));
+
+        const descriptions: Record<string, string> = {
+            reason: 'Complex thinking, multi-step logic',
+            summarize: 'Condensing, prioritizing info',
+            categorize: 'Classification, tagging',
+            format: 'Markdown, text cleanup',
+            chat: 'General conversation',
+            embed: 'Vector embeddings',
+        };
+
+        for (const cap of LLM_CAPABILITIES) {
+            console.log(`  ${chalk.bold(cap)}: ${chalk.gray(descriptions[cap])}`);
+        }
+        console.log('');
+    });
+
+// List providers
 configCommand
     .command('list-providers')
     .description('List available providers')

@@ -3,10 +3,10 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { requireProject, getDobbieRootPath } from '../state/manager.js';
+import { requireProject, getVaultRoot } from '../state/manager.js';
 import { getProjectContext } from '../context/reader.js';
-import { getModelForTask, createDobbieSystemPrompt } from '../llm/router.js';
-import { appendToMarkdown, createMarkdownFile } from '../markdown/parser.js';
+import { getModelForCapability, createDobbieSystemPrompt } from '../llm/router.js';
+import { appendToMarkdown } from '../markdown/parser.js';
 
 export const rememberCommand = new Command('remember')
     .description('Add something to context or notes')
@@ -14,22 +14,19 @@ export const rememberCommand = new Command('remember')
     .option('-g, --global', 'Add to global context instead of project')
     .action(async (text: string, options: { global?: boolean }) => {
         try {
-            const dobbieRoot = getDobbieRootPath();
+            const vaultRoot = await getVaultRoot();
             const today = new Date().toISOString().split('T')[0];
 
             let targetPath: string;
-            let contextPath: string;
 
             if (options.global) {
-                // Add to root .socks.md
-                targetPath = path.join(dobbieRoot, '.socks.md');
-                contextPath = dobbieRoot;
+                // Add to global .socks.md
+                targetPath = path.join(vaultRoot, 'global', '.socks.md');
                 console.log(chalk.gray('Adding to global context, sir.'));
             } else {
                 // Require a project
                 const project = await requireProject();
-                targetPath = path.join(dobbieRoot, 'projects', project, '.socks.md');
-                contextPath = path.join(dobbieRoot, 'projects', project);
+                targetPath = path.join(vaultRoot, 'projects', project, '.socks.md');
                 console.log(chalk.gray(`Adding to project "${project}", sir.`));
             }
 
@@ -37,8 +34,8 @@ export const rememberCommand = new Command('remember')
 
             try {
                 // Try to use AI to format the note
-                const context = await getProjectContext(options.global ? '' : await requireProject());
-                const llm = await getModelForTask('remember');
+                const context = options.global ? '' : await getProjectContext(await requireProject());
+                const llm = await getModelForCapability('format');
                 const systemPrompt = createDobbieSystemPrompt(context);
 
                 const prompt = `The user wants to remember the following. Format it nicely as a markdown note with an appropriate heading. Keep it concise but clear. Add relevant tags if appropriate.

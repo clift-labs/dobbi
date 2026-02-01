@@ -23,17 +23,31 @@ export const SecretsSchema = z.object({
 
 export type Secrets = z.infer<typeof SecretsSchema>;
 
-// Task-to-model mapping
-export const TaskModelMappingSchema = z.object({
+// LLM Capability categories
+export const LLMCapabilitySchema = z.enum([
+    'reason',      // Complex thinking, multi-step logic
+    'summarize',   // Condensing, prioritizing info
+    'categorize',  // Classification, tagging
+    'format',      // Markdown, text cleanup
+    'chat',        // General conversation
+    'embed',       // Vector embeddings
+]);
+
+export type LLMCapability = z.infer<typeof LLMCapabilitySchema>;
+
+export const LLM_CAPABILITIES = LLMCapabilitySchema.options;
+
+// Capability-to-model mapping
+export const CapabilityModelMappingSchema = z.object({
     provider: z.string(),
     model: z.string(),
 });
 
-export type TaskModelMapping = z.infer<typeof TaskModelMappingSchema>;
+export type CapabilityModelMapping = z.infer<typeof CapabilityModelMappingSchema>;
 
 // Config
 export const ConfigSchema = z.object({
-    taskModelMapping: z.record(z.string(), TaskModelMappingSchema),
+    capabilityMapping: z.record(LLMCapabilitySchema, CapabilityModelMappingSchema),
     defaultProvider: z.string(),
 });
 
@@ -54,7 +68,7 @@ export const ToolSchema = z.object({
     name: z.string(),
     description: z.string(),
     type: ToolTypeSchema,
-    model: z.string().optional(),
+    capability: LLMCapabilitySchema.optional(),  // Which capability this tool uses
 });
 
 export type ToolDefinition = z.infer<typeof ToolSchema>;

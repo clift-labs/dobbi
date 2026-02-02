@@ -162,6 +162,8 @@ export async function createProject(name: string): Promise<void> {
     await fs.mkdir(path.join(projectDir, 'notes'), { recursive: true });
     await fs.mkdir(path.join(projectDir, 'todos'), { recursive: true });
     await fs.mkdir(path.join(projectDir, 'research'), { recursive: true });
+    await fs.mkdir(path.join(projectDir, 'events'), { recursive: true });
+    await fs.mkdir(path.join(projectDir, 'inbox'), { recursive: true });
 
     // Create project .socks.md
     const today = new Date().toISOString().split('T')[0];
@@ -187,7 +189,7 @@ Project-specific context and notes.
     await fs.writeFile(path.join(projectDir, '.socks.md'), socksContent);
 
     // Create sub-folder .socks.md files
-    const subFolders = ['notes', 'todos', 'research'];
+    const subFolders = ['notes', 'todos', 'research', 'events', 'inbox'];
     for (const folder of subFolders) {
         const folderSocks = `---
 title: "${name} ${folder.charAt(0).toUpperCase() + folder.slice(1)} Context"

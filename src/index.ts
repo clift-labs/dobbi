@@ -10,6 +10,8 @@ import { syncCommand } from './commands/sync.js';
 import { initCommand } from './commands/init.js';
 import { noteCommand } from './commands/note.js';
 import { todoCommand } from './commands/todo.js';
+import { eventCommand } from './commands/event.js';
+import { inboxCommand } from './commands/inbox.js';
 import { listTools, getTool } from './tools/index.js';
 
 const program = new Command();
@@ -28,6 +30,8 @@ program.addCommand(configCommand);
 program.addCommand(syncCommand);
 program.addCommand(noteCommand);
 program.addCommand(todoCommand);
+program.addCommand(eventCommand);
+program.addCommand(inboxCommand);
 
 // Tool command - run any registered tool
 program
@@ -87,6 +91,10 @@ ${chalk.bold('Project Commands:')}
 ${chalk.bold('Memory Commands:')}
   ${chalk.bold('dobbie note [title]')}                  - Interactive note with AI editing
   ${chalk.bold('dobbie todo [title]')}                  - Interactive todo with AI assistance
+  ${chalk.bold('dobbie event [title]')}                 - Interactive event scheduling
+  ${chalk.bold('dobbie inbox')}                         - Process inbox items with AI
+  ${chalk.bold('dobbie inbox add "<text>"')}            - Add text to inbox
+  ${chalk.bold('dobbie inbox add <file>')}              - Add file to inbox
   ${chalk.bold('dobbie remember "<text>"')}             - Remember something (project)
   ${chalk.bold('dobbie remember -g "<text>"')}          - Remember something (global)
 

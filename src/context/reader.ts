@@ -142,3 +142,19 @@ export async function getSubdirectoryContext(projectName: string, subdirectory: 
 export async function getTodosContext(projectName: string): Promise<string> {
     return getSubdirectoryContext(projectName, 'todos');
 }
+
+/**
+ * Gets the context for events in a project.
+ * Convenience wrapper for getSubdirectoryContext.
+ */
+export async function getEventsContext(projectName: string): Promise<string> {
+    return getSubdirectoryContext(projectName, 'events');
+}
+
+/**
+ * Gets the context for inbox in a project.
+ * Convenience wrapper for getSubdirectoryContext.
+ */
+export async function getInboxContext(projectName: string): Promise<string> {
+    return getSubdirectoryContext(projectName, 'inbox');
+}

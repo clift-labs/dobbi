@@ -10,6 +10,7 @@ import { getModelForCapability, createDobbieSystemPrompt } from '../llm/router.j
 import { getResponse } from '../responses.js';
 import { renderEntityHeader, entityPrompt, noteHeaderConfig } from '../ui/entity-prompt.js';
 import { pushCrumb, popCrumb } from '../ui/breadcrumb.js';
+import { debug } from '../utils/debug.js';
 
 interface NoteState {
     title: string;
@@ -49,7 +50,7 @@ async function findExistingNote(project: string, titleOrFilename: string): Promi
             }
         }
     } catch (err) {
-        console.debug('[dobbie:commands:note]', err);
+        debug('note', err);
         // Notes directory doesn't exist yet
     }
 
@@ -163,7 +164,7 @@ ${state.content}`,
 
         return formatted.trim();
     } catch (err) {
-        console.debug('[dobbie:commands:note]', err);
+        debug('note', err);
         // If formatting fails, return original content
         console.log(chalk.yellow('Note: Markdown formatting skipped (configure AI for formatting)'));
         return state.content;

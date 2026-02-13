@@ -1,6 +1,7 @@
 import net from 'net';
 import { promises as fs } from 'fs';
 import type { ServiceRequest, ServiceResponse } from './protocol.js';
+import { debug } from '../utils/debug.js';
 
 type RequestHandler = (request: ServiceRequest) => Promise<ServiceResponse>;
 
@@ -26,7 +27,8 @@ export class ServiceServer {
         // Remove existing socket file
         try {
             await fs.unlink(socketPath);
-        } catch (err) { console.debug('[dobbie:service:server]', err);
+        } catch (err) {
+            debug('server', err);
             // Ignore
         }
 

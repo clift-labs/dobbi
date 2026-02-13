@@ -1,5 +1,6 @@
 import { promises as fs } from 'fs';
 import path from 'path';
+import { debug } from '../../utils/debug.js';
 import os from 'os';
 import type { Task } from '../protocol.js';
 
@@ -38,7 +39,7 @@ export async function saveQueueState(
         };
         await fs.writeFile(QUEUE_STATE_FILE, JSON.stringify(state, null, 2));
     } catch (err) {
-        console.debug('[dobbie:queue-persistence] Failed to save state:', err);
+        console.debug('[dobbie:queue-persistence] Failed to save state:', (err as Error).message);
     }
 }
 
@@ -50,7 +51,7 @@ export async function loadQueueState(): Promise<PersistedQueueState | null> {
         const data = await fs.readFile(QUEUE_STATE_FILE, 'utf-8');
         return JSON.parse(data) as PersistedQueueState;
     } catch (err) {
-        console.debug('[dobbie:queue-persistence] No saved state found:', err);
+        debug('queue-persistence', err);
         return null;
     }
 }
@@ -62,6 +63,6 @@ export async function clearQueueState(): Promise<void> {
     try {
         await fs.unlink(QUEUE_STATE_FILE);
     } catch (err) {
-        console.debug('[dobbie:queue-persistence] No state file to clear:', err);
+        debug('queue-persistence', err);
     }
 }

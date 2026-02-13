@@ -2,6 +2,8 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import { StateSchema, type State } from '../schemas/index.js';
+import { getResponse } from '../responses.js';
+import { debug } from '../utils/debug.js';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 
@@ -176,7 +178,7 @@ export async function listProjects(): Promise<string[]> {
             .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
             .map(entry => entry.name);
     } catch (err) {
-        console.debug('[dobbie:state:manager]', err);
+        debug('state', err);
         return [];
     }
 }
@@ -239,7 +241,7 @@ export async function projectExists(name: string): Promise<boolean> {
         const stat = await fs.stat(projectDir);
         return stat.isDirectory();
     } catch (err) {
-        console.debug('[dobbie:state:manager]', err);
+        debug('state', err);
         return false;
     }
 }

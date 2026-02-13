@@ -4,6 +4,8 @@ import inquirer from 'inquirer';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { requireProject, getVaultRoot } from '../state/manager.js';
+import { getResponse } from '../responses.js';
+import { debug } from '../utils/debug.js';
 import { getInboxContext } from '../context/reader.js';
 import { getModelForCapability, createDobbieSystemPrompt } from '../llm/router.js';
 
@@ -79,7 +81,8 @@ ${content}`,
             content: parsed.content || content,
             metadata: parsed.metadata || {},
         };
-    } catch (err) { console.debug('[dobbie:commands:inbox]', err);
+    } catch (err) {
+        debug('inbox', err);
         // Fallback if JSON parsing fails
         console.log(chalk.yellow('Could not parse AI response, defaulting to note'));
         return {
@@ -196,7 +199,8 @@ async function listInboxItems(project: string): Promise<string[]> {
         return files
             .filter(f => !f.startsWith('.'))
             .map(f => path.join(inboxDir, f));
-    } catch (err) { console.debug('[dobbie:commands:inbox]', err);
+    } catch (err) {
+        debug('inbox', err);
         return [];
     }
 }
@@ -230,7 +234,8 @@ export const inboxCommand = new Command('inbox')
                         console.log(chalk.green(`✓ Added file to inbox: ${path.basename(destPath)}`));
                         return;
                     }
-                } catch (err) { console.debug('[dobbie:commands:inbox]', err);
+                } catch (err) {
+                    debug('inbox', err);
                     // Not a file, treat as text content
                 }
 

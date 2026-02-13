@@ -9,6 +9,7 @@ import { getEventsContext } from '../context/reader.js';
 import { getModelForCapability, createDobbieSystemPrompt } from '../llm/router.js';
 import { renderEntityHeader, entityPrompt, eventHeaderConfig } from '../ui/entity-prompt.js';
 import { pushCrumb, popCrumb } from '../ui/breadcrumb.js';
+import { debug } from '../utils/debug.js';
 
 interface EventState {
     title: string;
@@ -74,7 +75,7 @@ async function findExistingEvent(project: string, titleOrFilename: string): Prom
             }
         }
     } catch (err) {
-        console.debug('[dobbie:commands:event]', err);
+        debug('event', err);
         // Events directory doesn't exist yet
     }
 

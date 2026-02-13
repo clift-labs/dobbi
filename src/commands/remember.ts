@@ -8,6 +8,7 @@ import { getProjectContext } from '../context/reader.js';
 import { getModelForCapability, createDobbieSystemPrompt } from '../llm/router.js';
 import { appendToMarkdown } from '../markdown/parser.js';
 import { getResponse } from '../responses.js';
+import { debug } from '../utils/debug.js';
 
 export const rememberCommand = new Command('remember')
     .description('Add something to context or notes')
@@ -57,7 +58,8 @@ Format the response as markdown that can be appended to an existing document.`;
 
                 try {
                     await appendToMarkdown(targetPath, noteWithDate);
-                } catch (err) { console.debug('[dobbie:commands:remember]', err);
+                } catch (err) {
+                    debug('remember', err);
                     // File doesn't exist or can't be parsed, just append
                     await fs.appendFile(targetPath, noteWithDate);
                 }
@@ -65,7 +67,8 @@ Format the response as markdown that can be appended to an existing document.`;
                 console.log(chalk.green('✓ ' + getResponse('remember_saved')));
                 console.log(chalk.gray(formattedNote));
 
-            } catch (err) { console.debug('[dobbie:commands:remember]', err);
+            } catch (err) {
+                console.debug('[dobbie:commands:remember]', err);
                 spinner.stop();
 
                 // Fall back to simple append without AI
@@ -73,7 +76,8 @@ Format the response as markdown that can be appended to an existing document.`;
 
                 try {
                     await fs.appendFile(targetPath, simpleNote);
-                } catch (err) { console.debug('[dobbie:commands:remember]', err);
+                } catch (err) {
+                    debug('remember', err);
                     // Create the directory and file if needed
                     await fs.mkdir(path.dirname(targetPath), { recursive: true });
                     await fs.writeFile(targetPath, simpleNote);

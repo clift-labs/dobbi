@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import { SecretsSchema, ConfigSchema, type Secrets, type Config, type LLMCapability, type CapabilityModelMapping } from './schemas/index.js';
+import { debug } from './utils/debug.js';
 
 const DOBBIE_DIR = path.join(os.homedir(), '.dobbie');
 const SECRETS_PATH = path.join(DOBBIE_DIR, 'secrets.json');
@@ -37,7 +38,8 @@ export async function loadSecrets(): Promise<Secrets> {
         await ensureDobbieDir();
         const data = await fs.readFile(SECRETS_PATH, 'utf-8');
         return SecretsSchema.parse(JSON.parse(data));
-    } catch (err) { console.debug('[dobbie:config]', err);
+    } catch (err) {
+        debug('config', err);
         return DEFAULT_SECRETS;
     }
 }
@@ -52,7 +54,8 @@ export async function loadConfig(): Promise<Config> {
         await ensureDobbieDir();
         const data = await fs.readFile(CONFIG_PATH, 'utf-8');
         return ConfigSchema.parse(JSON.parse(data));
-    } catch (err) { console.debug('[dobbie:config]', err);
+    } catch (err) {
+        debug('config', err);
         return DEFAULT_CONFIG;
     }
 }

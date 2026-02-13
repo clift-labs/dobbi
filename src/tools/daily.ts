@@ -3,6 +3,7 @@ import path from 'path';
 import matter from 'gray-matter';
 import { getVaultRoot, getActiveProject, listProjects } from '../state/manager.js';
 import { registerServiceTool, type ServiceToolResult } from './types.js';
+import { debug } from '../utils/debug.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPER FUNCTIONS
@@ -57,7 +58,8 @@ async function gatherProjectData(
                 });
             }
         }
-    } catch (err) { console.debug('[dobbie:tools:daily]', err);
+    } catch (err) {
+        debug('daily', err);
         // No todos
     }
 
@@ -87,7 +89,8 @@ async function gatherProjectData(
                 });
             }
         }
-    } catch (err) { console.debug('[dobbie:tools:daily]', err);
+    } catch (err) {
+        debug('daily', err);
         // No events
     }
 
@@ -114,7 +117,8 @@ async function gatherProjectData(
                 });
             }
         }
-    } catch (err) { console.debug('[dobbie:tools:daily]', err);
+    } catch (err) {
+        debug('daily', err);
         // No research
     }
 
@@ -145,7 +149,8 @@ async function gatherProjectData(
                 });
             }
         }
-    } catch (err) { console.debug('[dobbie:tools:daily]', err);
+    } catch (err) {
+        debug('daily', err);
         // No notes
     }
 
@@ -180,7 +185,8 @@ async function gatherGlobalData(vaultRoot: string, targetDate: string): Promise<
                 });
             }
         }
-    } catch (err) { console.debug('[dobbie:tools:daily]', err);
+    } catch (err) {
+        debug('daily', err);
         // No global todos
     }
 
@@ -210,7 +216,8 @@ async function gatherGlobalData(vaultRoot: string, targetDate: string): Promise<
                 });
             }
         }
-    } catch (err) { console.debug('[dobbie:tools:daily]', err);
+    } catch (err) {
+        debug('daily', err);
         // No schedule
     }
 
@@ -454,7 +461,8 @@ registerServiceTool({
                     created: data.created,
                 },
             };
-        } catch (err) { console.debug('[dobbie:tools:daily]', err);
+        } catch (err) {
+            debug('daily', err);
             return {
                 success: false,
                 output: null,

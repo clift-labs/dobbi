@@ -1,4 +1,6 @@
 import net from 'net';
+import { loadSecrets } from '../config.js';
+import { debug } from '../utils/debug.js';
 import { randomUUID } from 'crypto';
 import { getDaemonStatus, SOCKET_PATH } from '../service/daemon.js';
 import type { ServiceRequest, ServiceResponse, Task } from '../service/protocol.js';
@@ -221,7 +223,8 @@ export class ServiceClient {
                     this.responseHandlers.delete(response.requestId);
                     handler.resolve(response);
                 }
-            } catch (err) { console.debug('[dobbie:client:index]', err);
+            } catch (err) {
+                debug('client', err);
                 // Ignore parse errors
             }
         }

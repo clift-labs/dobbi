@@ -10,6 +10,7 @@ import { getModelForCapability, createDobbieSystemPrompt } from '../llm/router.j
 import { getResponse } from '../responses.js';
 import { renderEntityHeader, entityPrompt, todoHeaderConfig } from '../ui/entity-prompt.js';
 import { pushCrumb, popCrumb } from '../ui/breadcrumb.js';
+import { debug } from '../utils/debug.js';
 
 interface TodoState {
     title: string;
@@ -55,7 +56,7 @@ async function findExistingTodo(project: string, titleOrFilename: string): Promi
             }
         }
     } catch (err) {
-        console.debug('[dobbie:commands:todo]', err);
+        debug('todo', err);
         // Todos directory doesn't exist yet
     }
 
@@ -232,7 +233,7 @@ ${state.content}`,
 
         return formatted.trim();
     } catch (err) {
-        console.debug('[dobbie:commands:todo]', err);
+        debug('todo', err);
         console.log(chalk.yellow('Formatting skipped (configure AI for formatting)'));
         return state.content;
     }

@@ -1,4 +1,6 @@
 import { promises as fs } from 'fs';
+import { getResponse } from '../responses.js';
+import { debug } from '../utils/debug.js';
 import path from 'path';
 import os from 'os';
 import { spawn, ChildProcess } from 'child_process';
@@ -29,7 +31,8 @@ export async function readPid(): Promise<number | null> {
         const content = await fs.readFile(PID_FILE, 'utf-8');
         const pid = parseInt(content.trim(), 10);
         return isNaN(pid) ? null : pid;
-    } catch (err) { console.debug('[dobbie:service:daemon]', err);
+    } catch (err) {
+        debug('daemon', err);
         return null;
     }
 }
@@ -48,7 +51,8 @@ async function writePid(pid: number): Promise<void> {
 async function removePid(): Promise<void> {
     try {
         await fs.unlink(PID_FILE);
-    } catch (err) { console.debug('[dobbie:service:daemon]', err);
+    } catch (err) {
+        debug('daemon', err);
         // Ignore errors
     }
 }
@@ -60,7 +64,8 @@ function isProcessRunning(pid: number): boolean {
     try {
         process.kill(pid, 0);
         return true;
-    } catch (err) { console.debug('[dobbie:service:daemon]', err);
+    } catch (err) {
+        debug('daemon', err);
         return false;
     }
 }
@@ -99,7 +104,8 @@ export async function startDaemon(): Promise<DaemonStatus> {
     // Remove stale socket
     try {
         await fs.unlink(SOCKET_PATH);
-    } catch (err) { console.debug('[dobbie:service:daemon]', err);
+    } catch (err) {
+        debug('daemon', err);
         // Ignore
     }
 
@@ -154,7 +160,8 @@ export async function stopDaemon(): Promise<DaemonStatus> {
         if (isProcessRunning(status.pid)) {
             process.kill(status.pid, 'SIGKILL');
         }
-    } catch (err) { console.debug('[dobbie:service:daemon]', err);
+    } catch (err) {
+        debug('daemon', err);
         // Process might have already exited
     }
 
@@ -163,7 +170,8 @@ export async function stopDaemon(): Promise<DaemonStatus> {
     // Remove socket
     try {
         await fs.unlink(SOCKET_PATH);
-    } catch (err) { console.debug('[dobbie:service:daemon]', err);
+    } catch (err) {
+        debug('daemon', err);
         // Ignore
     }
 

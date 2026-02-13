@@ -7,6 +7,7 @@ import { getActiveProject, getVaultRoot } from '../state/manager.js';
 import { getContextString } from '../context/reader.js';
 import { getModelForCapability, createDobbieSystemPrompt } from '../llm/router.js';
 import { getResponse } from '../responses.js';
+import { debug } from '../utils/debug.js';
 
 export const todayCommand = new Command('today')
     .description('Show daily todos and notes')
@@ -32,7 +33,8 @@ export const todayCommand = new Command('today')
                         globalTodos += content + '\n\n';
                     }
                 }
-            } catch (err) { console.debug('[dobbie:commands:today]', err);
+            } catch (err) {
+                debug('today', err);
                 // No todos folder or empty
             }
 
@@ -47,7 +49,8 @@ export const todayCommand = new Command('today')
                         schedule += content + '\n\n';
                     }
                 }
-            } catch (err) { console.debug('[dobbie:commands:today]', err);
+            } catch (err) {
+                debug('today', err);
                 // No schedule folder or empty
             }
 
@@ -63,7 +66,8 @@ export const todayCommand = new Command('today')
                             projectTodos += content + '\n\n';
                         }
                     }
-                } catch (err) { console.debug('[dobbie:commands:today]', err);
+                } catch (err) {
+                    debug('today', err);
                     // No project todos
                 }
             }

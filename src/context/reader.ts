@@ -1,5 +1,6 @@
 import { promises as fs } from 'fs';
 import path from 'path';
+import { debug } from '../utils/debug.js';
 import { getVaultRoot } from '../state/manager.js';
 
 const SOCKS_FILE = '.socks.md';
@@ -12,7 +13,8 @@ async function readSocksFile(dirPath: string): Promise<string | null> {
     const socksPath = path.join(dirPath, SOCKS_FILE);
     try {
         return await fs.readFile(socksPath, 'utf-8');
-    } catch (err) { console.debug('[dobbie:context:reader]', err);
+    } catch (err) {
+        debug('context', err);
         return null;
     }
 }

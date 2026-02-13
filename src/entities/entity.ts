@@ -6,6 +6,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
+import { debug } from '../utils/debug.js';
 import { getVaultRoot, getActiveProject } from '../state/manager.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -199,7 +200,7 @@ export async function findEntityByTitle(
     try {
         dir = await getEntityDir(entityType);
     } catch (err) {
-        console.debug('[dobbie:entities:entity]', err);
+        debug('entities', err);
         return null;
     }
     const slug = slugify(titleOrFilename);
@@ -224,7 +225,7 @@ export async function findEntityByTitle(
             }
         }
     } catch (err) {
-        console.debug('[dobbie:entities:entity]', err);
+        debug('entities', err);
         // Directory doesn't exist yet
     }
 
@@ -241,7 +242,7 @@ export async function listEntities(
     try {
         dir = await getEntityDir(entityType);
     } catch (err) {
-        console.debug('[dobbie:entities:entity]', err);
+        debug('entities', err);
         return [];
     }
 
@@ -260,7 +261,7 @@ export async function listEntities(
             entities.push({ filepath, meta, content });
         }
     } catch (err) {
-        console.debug('[dobbie:entities:entity]', err);
+        debug('entities', err);
         // Directory doesn't exist
     }
 

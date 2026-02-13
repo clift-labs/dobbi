@@ -13,6 +13,8 @@ import {
 } from '../entities/entity.js';
 import { getVaultRoot, getActiveProject } from '../state/manager.js';
 import { registerServiceTool, type ServiceToolResult } from './types.js';
+import { getResponse } from '../responses.js';
+import { debug } from '../utils/debug.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPER: Global events live in global/schedule/
@@ -53,7 +55,7 @@ async function findEventInDir(dir: string, titleOrFilename: string): Promise<Eve
                 return { filepath, meta: data, content: content.trim() };
             }
         }
-    } catch (err) { console.debug('[dobbie:tools:events]', err); /* no dir yet */ }
+    } catch (err) { debug('events', err); /* no dir yet */ }
     return null;
 }
 
@@ -76,7 +78,7 @@ async function listEventsInDir(
 
             events.push({ filepath, meta: data, content: content.trim() });
         }
-    } catch (err) { console.debug('[dobbie:tools:events]', err); /* no dir */ }
+    } catch (err) { debug('events', err); /* no dir */ }
     return events;
 }
 
@@ -303,7 +305,8 @@ registerServiceTool({
         let projectDir: string;
         try {
             projectDir = await getEntityDir('event');
-        } catch (err) { console.debug('[dobbie:tools:events]', err);
+        } catch (err) {
+            debug('events', err);
             projectDir = '';
         }
         const globalDir = await getGlobalEventsDir();
@@ -370,7 +373,8 @@ registerServiceTool({
         let projectDir: string;
         try {
             projectDir = await getEntityDir('event');
-        } catch (err) { console.debug('[dobbie:tools:events]', err);
+        } catch (err) {
+            debug('events', err);
             projectDir = '';
         }
         const events = projectDir ? await listEventsInDir(projectDir, { startDate, endDate }) : [];

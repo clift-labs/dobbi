@@ -294,14 +294,17 @@ Commands:
 
 export const noteCommand = new Command('note')
     .description('Take an interactive note with AI assistance')
-    .argument('[title]', 'Note title (opens existing note if found)')
-    .action(async (titleArg?: string) => {
+    .argument('[words...]', 'Title and optional inline body (e.g. "my-idea Use the Ferral CCI system")')
+    .action(async (words: string[]) => {
         try {
             // Require a project
             const project = await requireProject();
 
+            // Parse: first word = title, rest = inline body
+            let title = words.length > 0 ? words[0] : undefined;
+            const inlineBody = words.length > 1 ? words.slice(1).join(' ') : undefined;
+
             // Get title if not provided
-            let title = titleArg;
             if (!title) {
                 const { noteTitle } = await inquirer.prompt([
                     {
@@ -320,7 +323,23 @@ export const noteCommand = new Command('note')
             let state: NoteState;
 
             if (existing) {
-                // Open existing note
+                // Open existing note — if inline body, append to it
+                if (inlineBody) {
+                    const updatedContent = existing.content
+                        ? existing.content + '\n\n' + inlineBody
+                        : inlineBody;
+                    state = {
+                        title: existing.title,
+                        content: updatedContent,
+                        project,
+                        filepath: existing.filepath,
+                        isExisting: true,
+                    };
+                    const filepath = await saveNote(state);
+                    console.log(chalk.green(`\n✓ Appended to "${existing.title}" → ${filepath}`));
+                    return;
+                }
+
                 console.log(chalk.green(`\n✓ Opening existing note "${existing.title}"`));
                 state = {
                     title: existing.title,
@@ -329,6 +348,17 @@ export const noteCommand = new Command('note')
                     filepath: existing.filepath,
                     isExisting: true,
                 };
+            } else if (inlineBody) {
+                // Quick note — save immediately, no interactive loop
+                state = {
+                    title: title!,
+                    content: inlineBody,
+                    project,
+                    isExisting: false,
+                };
+                const filepath = await saveNote(state);
+                console.log(chalk.green(`\n✓ Quick note saved → ${filepath}`));
+                return;
             } else {
                 // Create new note - get initial content
                 console.log(chalk.gray('\nEnter your note content (end with an empty line):'));

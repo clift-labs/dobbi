@@ -27,7 +27,7 @@ export async function findVaultRoot(): Promise<string | null> {
             await fs.access(socksPath);
             cachedVaultRoot = currentDir;
             return currentDir;
-        } catch (err) { console.debug('[dobbie:state:manager]', err);
+        } catch {
             // No .socks.md here, try parent
             currentDir = path.dirname(currentDir);
         }
@@ -46,7 +46,7 @@ export async function getVaultRoot(): Promise<string> {
         console.error(chalk.red('\n🧝 Dobbie cannot find a vault here, sir.'));
         console.error(chalk.gray('This directory does not contain a .socks.md file.'));
         console.error(chalk.gray('\nTo create a new vault, run: dobbie init'));
-        process.exit(1);
+        throw new Error('No vault found in current directory tree');
     }
 
     return root;
@@ -73,7 +73,7 @@ export async function loadState(): Promise<State> {
         const vaultRoot = await getVaultRoot();
         const data = await fs.readFile(getStatePath(vaultRoot), 'utf-8');
         return StateSchema.parse(JSON.parse(data));
-    } catch (err) { console.debug('[dobbie:state:manager]', err);
+    } catch {
         return DEFAULT_STATE;
     }
 }
@@ -167,7 +167,8 @@ export async function listProjects(): Promise<string[]> {
         return entries
             .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
             .map(entry => entry.name);
-    } catch (err) { console.debug('[dobbie:state:manager]', err);
+    } catch (err) {
+        console.debug('[dobbie:state:manager]', err);
         return [];
     }
 }
@@ -229,7 +230,8 @@ export async function projectExists(name: string): Promise<boolean> {
     try {
         const stat = await fs.stat(projectDir);
         return stat.isDirectory();
-    } catch (err) { console.debug('[dobbie:state:manager]', err);
+    } catch (err) {
+        console.debug('[dobbie:state:manager]', err);
         return false;
     }
 }

@@ -11,6 +11,8 @@
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "build:binary": "npm run build && pkg . --out-path bin"
   },
   "pkg": {
@@ -35,6 +37,7 @@
     "@types/node": "^20.11.0",
     "pkg": "^5.8.1",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^4.0.18"
   }
 }

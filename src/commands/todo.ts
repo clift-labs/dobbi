@@ -8,6 +8,7 @@ import { requireProject, getVaultRoot } from '../state/manager.js';
 import { getTodosContext } from '../context/reader.js';
 import { getModelForCapability, createDobbieSystemPrompt } from '../llm/router.js';
 import { getResponse } from '../responses.js';
+import { renderEntityHeader, entityPrompt, todoHeaderConfig } from '../ui/entity-prompt.js';
 
 interface TodoState {
     title: string;
@@ -52,7 +53,8 @@ async function findExistingTodo(project: string, titleOrFilename: string): Promi
                 };
             }
         }
-    } catch (err) { console.debug('[dobbie:commands:todo]', err);
+    } catch (err) {
+        console.debug('[dobbie:commands:todo]', err);
         // Todos directory doesn't exist yet
     }
 
@@ -228,7 +230,8 @@ ${state.content}`,
         }
 
         return formatted.trim();
-    } catch (err) { console.debug('[dobbie:commands:todo]', err);
+    } catch (err) {
+        console.debug('[dobbie:commands:todo]', err);
         console.log(chalk.yellow('Formatting skipped (configure AI for formatting)'));
         return state.content;
     }
@@ -400,6 +403,7 @@ export const todoCommand = new Command('todo')
                 console.log(chalk.green(`\n✓ Todo created for project "${project}"`));
             }
 
+            renderEntityHeader(todoHeaderConfig(state));
             showHelp();
             displayTodo(state);
 
@@ -410,7 +414,7 @@ export const todoCommand = new Command('todo')
                     {
                         type: 'input',
                         name: 'command',
-                        message: chalk.cyan('todo>'),
+                        message: entityPrompt('todo'),
                         prefix: '',
                     },
                 ]);

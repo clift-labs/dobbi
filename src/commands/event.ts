@@ -7,6 +7,7 @@ import matter from 'gray-matter';
 import { requireProject, getVaultRoot } from '../state/manager.js';
 import { getEventsContext } from '../context/reader.js';
 import { getModelForCapability, createDobbieSystemPrompt } from '../llm/router.js';
+import { renderEntityHeader, entityPrompt, eventHeaderConfig } from '../ui/entity-prompt.js';
 
 interface EventState {
     title: string;
@@ -71,7 +72,8 @@ async function findExistingEvent(project: string, titleOrFilename: string): Prom
                 };
             }
         }
-    } catch (err) { console.debug('[dobbie:commands:event]', err);
+    } catch (err) {
+        console.debug('[dobbie:commands:event]', err);
         // Events directory doesn't exist yet
     }
 
@@ -307,6 +309,7 @@ export const eventCommand = new Command('event')
                 console.log(chalk.green(`\n✓ Event created for project "${project}"`));
             }
 
+            renderEntityHeader(eventHeaderConfig(state));
             showHelp();
             displayEvent(state);
 
@@ -316,7 +319,7 @@ export const eventCommand = new Command('event')
                     {
                         type: 'input',
                         name: 'command',
-                        message: chalk.cyan('event>'),
+                        message: entityPrompt('event'),
                         prefix: '',
                     },
                 ]);

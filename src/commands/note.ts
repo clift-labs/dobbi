@@ -8,6 +8,7 @@ import { requireProject, getVaultRoot } from '../state/manager.js';
 import { getNotesContext } from '../context/reader.js';
 import { getModelForCapability, createDobbieSystemPrompt } from '../llm/router.js';
 import { getResponse } from '../responses.js';
+import { renderEntityHeader, entityPrompt, noteHeaderConfig } from '../ui/entity-prompt.js';
 
 interface NoteState {
     title: string;
@@ -46,7 +47,8 @@ async function findExistingNote(project: string, titleOrFilename: string): Promi
                 };
             }
         }
-    } catch (err) { console.debug('[dobbie:commands:note]', err);
+    } catch (err) {
+        console.debug('[dobbie:commands:note]', err);
         // Notes directory doesn't exist yet
     }
 
@@ -159,7 +161,8 @@ ${state.content}`,
         }
 
         return formatted.trim();
-    } catch (err) { console.debug('[dobbie:commands:note]', err);
+    } catch (err) {
+        console.debug('[dobbie:commands:note]', err);
         // If formatting fails, return original content
         console.log(chalk.yellow('Note: Markdown formatting skipped (configure AI for formatting)'));
         return state.content;
@@ -344,6 +347,7 @@ export const noteCommand = new Command('note')
                 console.log(chalk.green(`\n✓ Note started for project "${project}"`));
             }
 
+            renderEntityHeader(noteHeaderConfig(state));
             showHelp();
             displayNote(state);
 
@@ -354,7 +358,7 @@ export const noteCommand = new Command('note')
                     {
                         type: 'input',
                         name: 'command',
-                        message: chalk.cyan('note>'),
+                        message: entityPrompt('note'),
                         prefix: '',
                     },
                 ]);

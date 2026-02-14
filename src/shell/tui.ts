@@ -6,6 +6,7 @@
  */
 
 import chalk from 'chalk';
+import { printStartupBanner } from './banner.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Status data
@@ -72,11 +73,10 @@ export class StatusBar {
     }
 
     /**
-     * Print the initial welcome header.
+     * Print the startup banner with ASCII art, greeting, and state summary.
      */
-    printWelcome(): void {
-        console.log(chalk.cyan('\n🧝 Dobbie interactive shell, sir!'));
-        console.log(chalk.gray('   Tab-complete commands • Up/Down for history • Type "exit" or Ctrl+D to leave\n'));
+    async printWelcome(): Promise<void> {
+        await printStartupBanner();
     }
 
     private stripAnsi(str: string): string {

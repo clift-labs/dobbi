@@ -120,7 +120,7 @@ export function createShellCommand(_program: Command): Command {
             // Start background polling (updates bar data silently)
             poller.start();
 
-            bar.printWelcome();
+            await bar.printWelcome();
 
             const prompt = breadcrumbPrompt();
 

@@ -41,7 +41,8 @@ export type ResponseKey =
     | 'provider_added'
     | 'capability_set'
     | 'diagram_generating'
-    | 'help_offer';
+    | 'help_offer'
+    | 'startup_greeting';
 
 const responses: Record<ResponseKey, string[]> = {
     greeting: [
@@ -376,6 +377,18 @@ const responses: Record<ResponseKey, string[]> = {
         'What else can Dobbie do for you, {name}?',
         'Dobbie remains at your service, sir!',
         'Dobbie is here if you need more help, {name}!',
+    ],
+    startup_greeting: [
+        '🧝 *yawns* Dobbie is awake and ready to serve, {name}!',
+        '🧝 Dobbie has polished his socks and is reporting for duty, {name}!',
+        '🧝 Systems online, sir! Dobbie ran all the diagnostics twice... just to be safe.',
+        '🧝 Dobbie is here, {name}! The socks are sorted and the quills are sharp!',
+        '🧝 *cracks knuckles* Dobbie is warmed up and eager, sir!',
+        '🧝 Good day, {name}! Dobbie has been counting the seconds until your return.',
+        '🧝 Dobbie\'s ears perked up the moment you arrived, {name}!',
+        '🧝 All candles lit, all scrolls ready — Dobbie awaits your command, sir!',
+        '🧝 Dobbie checked the vault, polished the projects, and is standing by, {name}!',
+        '🧝 *bounces excitedly* Dobbie is fully operational and at your service, sir!',
     ],
 };
 

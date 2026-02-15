@@ -221,6 +221,7 @@ Commands:
   ${chalk.bold('clarify')}      - AI clarifies and improves the description
   ${chalk.bold('suggest-time')} - AI suggests optimal timing
   ${chalk.bold('modify')}       - AI modifies based on your feedback
+  ${chalk.bold('save')}         - Save the current version
   ${chalk.bold('show')}         - Display the current event
   ${chalk.bold('edit')}         - Edit the description
   ${chalk.bold('title')}        - Change the title
@@ -373,8 +374,13 @@ export const eventCommand = new Command('event')
                 const args = parts.slice(1).join(' ');
 
                 switch (action) {
-                    case 'exit':
                     case 'save': {
+                        const filepath = await saveEvent(state);
+                        console.log(chalk.green(`\n✓ Event saved to ${filepath}, sir!`));
+                        break;
+                    }
+
+                    case 'exit': {
                         const filepath = await saveEvent(state);
                         console.log(chalk.green(`\n✓ Event saved to ${filepath}, sir!`));
                         running = false;

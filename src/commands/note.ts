@@ -68,11 +68,8 @@ async function reviewNote(state: NoteState): Promise<string> {
     const response = await llm.chat([
         {
             role: 'user',
-            content: `Review and improve the following note. Fix any grammar, spelling, or clarity issues. Keep the same meaning but make it clearer and more professional. Return ONLY the improved note content, no explanations.
+            content: `Review and improve the following note. Fix any grammar, spelling, or clarity issues. Keep the same meaning but make it clearer and more professional. Return ONLY the improved content, no explanations, no title heading.
 
-Title: ${state.title}
-
-Content:
 ${state.content}`,
         },
     ], { systemPrompt });
@@ -283,6 +280,7 @@ Commands:
   ${chalk.bold('questions')}  - AI generates 3 questions about the note
   ${chalk.bold('modify')}     - AI modifies the note based on your feedback
   ${chalk.bold('diagram')}    - AI generates a mermaid diagram (flowchart|class|sequence)
+  ${chalk.bold('save')}       - Save the current version
   ${chalk.bold('show')}       - Display the current note
   ${chalk.bold('edit')}       - Edit the note content
   ${chalk.bold('title')}      - Change the title
@@ -410,8 +408,13 @@ export const noteCommand = new Command('note')
                 const args = parts.slice(1).join(' ');
 
                 switch (action) {
-                    case 'exit':
                     case 'save': {
+                        const filepath = await saveNote(state);
+                        console.log(chalk.green(`\n✓ Note saved to ${filepath}, sir!`));
+                        break;
+                    }
+
+                    case 'exit': {
                         const filepath = await saveNote(state);
                         console.log(chalk.green(`\n✓ Note saved to ${filepath}, sir!`));
                         running = false;

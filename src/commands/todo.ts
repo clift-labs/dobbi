@@ -305,6 +305,7 @@ Commands:
   ${chalk.bold('clarify')}    - AI clarifies and improves the description
   ${chalk.bold('estimate')}   - AI estimates time, complexity, dependencies
   ${chalk.bold('modify')}     - AI modifies the todo based on your feedback
+  ${chalk.bold('save')}       - Save the current version
   ${chalk.bold('show')}       - Display the current todo
   ${chalk.bold('edit')}       - Edit the todo content
   ${chalk.bold('title')}      - Change the title
@@ -473,8 +474,13 @@ export const todoCommand = new Command('todo')
                 const args = parts.slice(1).join(' ');
 
                 switch (action) {
-                    case 'exit':
                     case 'save': {
+                        const filepath = await saveTodo(state);
+                        console.log(chalk.green(`\n✓ Todo saved to ${filepath}, sir!`));
+                        break;
+                    }
+
+                    case 'exit': {
                         const filepath = await saveTodo(state);
                         console.log(chalk.green(`\n✓ Todo saved to ${filepath}, sir!`));
                         running = false;

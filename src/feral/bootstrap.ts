@@ -38,6 +38,7 @@ import { JsonEncodeNodeCode } from './node-code/data/json-encode-node-code.js';
 import { LogNodeCode } from './node-code/data/log-node-code.js';
 import { RandomValueNodeCode } from './node-code/data/random-value-node-code.js';
 import { ReadFileNodeCode } from './node-code/data/read-file-node-code.js';
+import { LlmChatNodeCode } from './node-code/data/llm-chat-node-code.js';
 
 // Slack node codes
 import { SlackBlockBuilderNodeCode } from './node-code/slack/slack-block-builder-node-code.js';
@@ -95,6 +96,7 @@ function getBuiltInNodeCodes(): NodeCode[] {
         new LogNodeCode(),
         new RandomValueNodeCode(),
         new ReadFileNodeCode(),
+        new LlmChatNodeCode(),
         // Slack
         new SlackBlockBuilderNodeCode(),
         new SlackPostWebhookNodeCode(),

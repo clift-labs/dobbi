@@ -71,6 +71,7 @@ export { hydrateProcess, hydrateProcessFromString } from './process/process-json
 export type { ProcessConfigJson } from './process/process-json-hydrator.js';
 export { ProcessFactory } from './process/process-factory.js';
 export type { ProcessSource } from './process/process-factory.js';
+export { JsonProcessSource } from './process/json-process-source.js';
 
 // Events
 export type {
@@ -102,6 +103,7 @@ export { loadFeralCatalogConfig, saveFeralCatalogConfig, FERAL_CATALOG_PATH } fr
 export type { FeralCatalogConfigJson, CatalogNodeConfigJson } from './catalog/feral-catalog-config.js';
 export { SlackCatalogSource } from './catalog/slack-catalog-source.js';
 export { AgentCatalogSource } from './catalog/agent-catalog-source.js';
+export { EntityCatalogSource } from './catalog/entity-catalog-source.js';
 
 // Slack NodeCodes
 export { SlackBlockBuilderNodeCode } from './node-code/slack/slack-block-builder-node-code.js';
@@ -121,6 +123,14 @@ export type { KeyValueStore } from './node-code/genai/write-to-redis-node-code.j
 export { OpenAiNodeCode } from './node-code/genai/openai-node-code.js';
 export { ModelToOutputNodeCode } from './node-code/genai/model-to-output-node-code.js';
 export { HydrateModelNodeCode } from './node-code/genai/hydrate-model-node-code.js';
+
+// Entity NodeCodes
+export { ListEntitiesNodeCode } from './node-code/entity/list-entities-node-code.js';
+export { FindEntityNodeCode } from './node-code/entity/find-entity-node-code.js';
+export { CreateEntityNodeCode } from './node-code/entity/create-entity-node-code.js';
+export { UpdateEntityNodeCode } from './node-code/entity/update-entity-node-code.js';
+export { DeleteEntityNodeCode } from './node-code/entity/delete-entity-node-code.js';
+export { SortEntitiesNodeCode } from './node-code/entity/sort-entities-node-code.js';
 
 // Trace
 export type { TraceEntry, ProcessTrace, ProcessTraceCollector } from './trace/process-trace.js';

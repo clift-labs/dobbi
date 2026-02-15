@@ -6,6 +6,9 @@
 // Call bootstrapFeral() once at service/CLI startup.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import path from 'path';
+import os from 'os';
+
 import { NodeCodeFactory } from './node-code/node-code-factory.js';
 import type { NodeCode } from './node-code/node-code.js';
 import { Catalog } from './catalog/catalog.js';
@@ -53,9 +56,21 @@ import { OpenAiNodeCode } from './node-code/genai/openai-node-code.js';
 import { ModelToOutputNodeCode } from './node-code/genai/model-to-output-node-code.js';
 import { HydrateModelNodeCode } from './node-code/genai/hydrate-model-node-code.js';
 
+// Entity node codes
+import { ListEntitiesNodeCode } from './node-code/entity/list-entities-node-code.js';
+import { FindEntityNodeCode } from './node-code/entity/find-entity-node-code.js';
+import { CreateEntityNodeCode } from './node-code/entity/create-entity-node-code.js';
+import { UpdateEntityNodeCode } from './node-code/entity/update-entity-node-code.js';
+import { DeleteEntityNodeCode } from './node-code/entity/delete-entity-node-code.js';
+import { SortEntitiesNodeCode } from './node-code/entity/sort-entities-node-code.js';
+
 // Catalog sources
 import { SlackCatalogSource } from './catalog/slack-catalog-source.js';
 import { AgentCatalogSource } from './catalog/agent-catalog-source.js';
+import { EntityCatalogSource } from './catalog/entity-catalog-source.js';
+
+// Process sources
+import { JsonProcessSource } from './process/json-process-source.js';
 
 /**
  * All built-in NodeCode instances.
@@ -95,6 +110,13 @@ function getBuiltInNodeCodes(): NodeCode[] {
         new OpenAiNodeCode(),
         new ModelToOutputNodeCode(),
         new HydrateModelNodeCode(),
+        // Entity
+        new ListEntitiesNodeCode(),
+        new FindEntityNodeCode(),
+        new CreateEntityNodeCode(),
+        new UpdateEntityNodeCode(),
+        new DeleteEntityNodeCode(),
+        new SortEntitiesNodeCode(),
     ];
 }
 
@@ -134,12 +156,18 @@ export async function bootstrapFeral(
         new JsonCatalogSource(catalogConfig),
         new SlackCatalogSource(),
         new AgentCatalogSource(),
+        new EntityCatalogSource(),
     ]);
 
-    // 4. Wire engine
+    // 4. Load process definitions from ~/.dobbie/processes/
+    const processDir = path.join(os.homedir(), '.dobbie', 'processes');
+    const jsonProcessSource = new JsonProcessSource(processDir);
+    await jsonProcessSource.load();
+
+    // 5. Wire engine
     const eventDispatcher = new EventDispatcher();
     const engine = new ProcessEngine(eventDispatcher, catalog, nodeCodeFactory);
-    const processFactory = new ProcessFactory(processSources);
+    const processFactory = new ProcessFactory([jsonProcessSource, ...processSources]);
     const runner = new Runner(processFactory, engine);
 
     return {

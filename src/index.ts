@@ -16,6 +16,7 @@ import { recurrenceCommand } from './commands/recurrence.js';
 import { inboxCommand } from './commands/inbox.js';
 import { serviceCommand, queueCommand } from './commands/service.js';
 import { createShellCommand } from './commands/shell.js';
+import { feralCommand } from './commands/feral.js';
 import { listServiceTools, getServiceTool } from './tools/index.js';
 
 export const program = new Command();
@@ -40,6 +41,7 @@ program.addCommand(recurrenceCommand);
 program.addCommand(inboxCommand);
 program.addCommand(serviceCommand);
 program.addCommand(queueCommand);
+program.addCommand(feralCommand);
 program.addCommand(createShellCommand(program));
 
 // Tool command - run any registered tool

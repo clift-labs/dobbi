@@ -15,14 +15,7 @@
     "test:watch": "vitest --exclude='tests/integration/**'",
     "test:integration": "vitest run tests/integration",
     "test:all": "vitest run",
-    "build:binary": "npm run build && pkg . --out-path bin"
-  },
-  "pkg": {
-    "targets": [
-      "node18-macos-arm64"
-    ],
-    "outputPath": "bin",
-    "assets": []
+    "build:binary": "bash scripts/build-binary.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -38,7 +31,7 @@
   "devDependencies": {
     "@types/inquirer": "^9.0.7",
     "@types/node": "^20.11.0",
-    "pkg": "^5.8.1",
+    "esbuild": "^0.27.3",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
     "vitest": "^4.0.18"

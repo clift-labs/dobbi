@@ -16,8 +16,9 @@ import { findVaultRoot, getActiveProject } from '../state/manager.js';
  * Load the ASCII art from dobbie.txt (bundled alongside the source).
  */
 async function loadAsciiArt(): Promise<string> {
-    const artPath = path.join(import.meta.dirname, '..', 'dobbie.txt');
+    // In dev mode, read from disk
     try {
+        const artPath = path.join(import.meta.dirname, '..', 'dobbie.txt');
         return await fs.readFile(artPath, 'utf-8');
     } catch {
         // Fallback if the file cannot be found (e.g. in a binary bundle)

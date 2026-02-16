@@ -1,0 +1,7 @@
+{
+    "main": "dist/dobbie-bundle.cjs",
+    "output": "sea-prep.blob",
+    "disableExperimentalSEAWarning": true,
+    "useCodeCache": true,
+    "useSnapshot": false
+}

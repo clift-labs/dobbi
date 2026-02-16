@@ -3,6 +3,8 @@ node_modules/
 
 # Build output
 dist/
+bin/
+sea-prep.blob
 
 # Local state (not synced)
 .state.json

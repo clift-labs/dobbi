@@ -21,6 +21,7 @@ const COMMAND_TREE: Record<string, string[]> = {
     project: ['list', 'switch', 'new'],
     config: ['add-provider', 'set-capability', 'list-capabilities', 'list-providers', 'set-name'],
     sync: [],
+    week: ['--next'],
     note: ['list'],
     todo: ['list'],
     task: ['list'],

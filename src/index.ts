@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { todayCommand } from './commands/today.js';
+import { weekCommand } from './commands/week.js';
 import { rememberCommand } from './commands/remember.js';
 import { projectCommand } from './commands/project.js';
 import { configCommand } from './commands/config.js';
@@ -31,6 +32,7 @@ program
 // Register commands
 program.addCommand(initCommand);
 program.addCommand(todayCommand);
+program.addCommand(weekCommand);
 program.addCommand(rememberCommand);
 program.addCommand(projectCommand);
 program.addCommand(configCommand);

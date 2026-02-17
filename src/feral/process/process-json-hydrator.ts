@@ -8,6 +8,27 @@ import type { Edge } from './edge.js';
 import type { Process } from './process.js';
 
 /**
+ * Tool metadata that can be embedded in a process JSON to auto-register
+ * it as a service tool.
+ */
+export interface ProcessToolMeta {
+    type: 'deterministic' | 'ai';
+    capability?: string;
+    input_schema?: {
+        type: string;
+        properties?: Record<string, {
+            type: string;
+            description?: string;
+            required?: boolean;
+            items?: { type: string };
+            properties?: Record<string, { type: string; description?: string }>;
+        }>;
+        required?: string[];
+    };
+    canvas_type?: string;
+}
+
+/**
  * JSON schema for a process configuration file.
  */
 export interface ProcessConfigJson {
@@ -15,6 +36,7 @@ export interface ProcessConfigJson {
     key: string;
     version?: number;
     description?: string;
+    tool?: ProcessToolMeta;
     context: Record<string, unknown>;
     nodes: Array<{
         key: string;
@@ -60,6 +82,7 @@ export function hydrateProcess(json: ProcessConfigJson): Process {
     return {
         key: json.key,
         description: json.description ?? '',
+        tool: json.tool,
         context,
         nodes,
         edges,

@@ -1,0 +1,53 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Feral CCF — CLI Command NodeCode
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { execSync } from 'node:child_process';
+import type { Context } from '../../context/context.js';
+import type { Result } from '../../result/result.js';
+import { ResultStatus } from '../../result/result.js';
+import type { ConfigurationDescription, ResultDescription } from '../../configuration/configuration-description.js';
+import { AbstractNodeCode } from '../abstract-node-code.js';
+import { NodeCodeCategory } from '../node-code.js';
+
+export class CliCommandNodeCode extends AbstractNodeCode {
+    static readonly configDescriptions: ConfigurationDescription[] = [
+        { key: 'command', name: 'Command', description: 'Shell command to execute. Supports {key} interpolation from context.', type: 'string' },
+        { key: 'context_path', name: 'Context Path', description: 'Context key to store stdout.', type: 'string' },
+        { key: 'timeout_ms', name: 'Timeout (ms)', description: 'Max execution time in milliseconds.', type: 'int', default: 5000, isOptional: true },
+    ];
+    static readonly resultDescriptions: ResultDescription[] = [
+        { status: ResultStatus.OK, description: 'Command executed successfully.' },
+        { status: ResultStatus.ERROR, description: 'Command failed or timed out.' },
+    ];
+
+    constructor() {
+        super('cli_command', 'CLI Command', 'Executes a local shell command and stores stdout in the context.', NodeCodeCategory.WORK);
+    }
+
+    async process(context: Context): Promise<Result> {
+        const commandTemplate = this.getRequiredConfigValue('command') as string;
+        const contextPath = this.getRequiredConfigValue('context_path') as string;
+        const timeoutMs = Number(this.getOptionalConfigValue('timeout_ms', 5000));
+
+        // Interpolate {key} references from context
+        const command = commandTemplate.replace(/\{(\w+)\}/g, (_, key: string) => {
+            return String(context.get(key) ?? '');
+        });
+
+        try {
+            const stdout = execSync(command, {
+                encoding: 'utf-8',
+                timeout: timeoutMs,
+                stdio: ['pipe', 'pipe', 'pipe'],
+            }).trim();
+
+            context.set(contextPath, stdout);
+            return this.result(ResultStatus.OK, `${contextPath} = "${stdout.slice(0, 80)}"`);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            context.set(contextPath, '');
+            return this.result(ResultStatus.ERROR, `CLI command failed: ${message}`);
+        }
+    }
+}

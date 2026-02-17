@@ -21,6 +21,7 @@ import { createShellCommand } from './commands/shell.js';
 import { feralCommand } from './commands/feral.js';
 import { interviewCommand } from './commands/interview.js';
 import { listServiceTools, getServiceTool } from './tools/index.js';
+import { bootstrapFeral } from './feral/bootstrap.js';
 
 export const program = new Command();
 
@@ -56,12 +57,17 @@ program
   .command('tool <name> [input]')
   .description('Run a tool')
   .action(async (name: string, input?: string) => {
-    const tool = getServiceTool(name);
+    const feral = await bootstrapFeral();
+    const tool = feral.toolRegistry.getTool(name) ?? getServiceTool(name);
 
     if (!tool) {
       console.log(chalk.red(`Unknown tool: ${name}`));
       console.log(chalk.gray('\nAvailable tools:'));
-      for (const t of listServiceTools()) {
+      const allTools = [...feral.toolRegistry.listTools(), ...listServiceTools()];
+      const seen = new Set<string>();
+      for (const t of allTools) {
+        if (seen.has(t.name)) continue;
+        seen.add(t.name);
         console.log(chalk.gray(`  - ${t.name}: ${t.description}`));
       }
       return;
@@ -75,9 +81,15 @@ program
 program
   .command('tools')
   .description('List available tools')
-  .action(() => {
+  .action(async () => {
+    const feral = await bootstrapFeral();
+    const allTools = [...feral.toolRegistry.listTools(), ...listServiceTools()];
+    const seen = new Set<string>();
+
     console.log(chalk.cyan('\n🔧 Available Tools:\n'));
-    for (const tool of listServiceTools()) {
+    for (const tool of allTools) {
+      if (seen.has(tool.name)) continue;
+      seen.add(tool.name);
       const typeIcon = tool.type === 'deterministic' ? '⚡' : '🤖';
       console.log(`  ${typeIcon} ${chalk.bold(tool.name)}`);
       console.log(chalk.gray(`     ${tool.description}`));

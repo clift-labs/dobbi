@@ -241,13 +241,16 @@ function printShellHelp(): void {
     console.log(chalk.cyan(`
 ${chalk.bold('Available Commands:')}
 
-  ${chalk.bold('Vault:')}      init, sync, today
+  ${chalk.bold('Vault:')}      init, sync, today, week [--next]
   ${chalk.bold('Projects:')}   project [list|switch|new]
-  ${chalk.bold('Memory:')}     note, todo, event, person, inbox [add], remember
+  ${chalk.bold('Memory:')}     note, todo, task, event, research, recurrence, person, inbox [add], remember
+  ${chalk.bold('Index:')}      index [stats|graph|neighbors|rebuild]
   ${chalk.bold('Config:')}     config [add-provider|set-capability|list-capabilities|list-providers|set-name]
   ${chalk.bold('Service:')}    service [start|stop|status]
   ${chalk.bold('Queue:')}      queue [size|status|clear|pause|resume]
   ${chalk.bold('Tools:')}      tools, tool <name>
+  ${chalk.bold('Feral:')}      feral [nodes|catalog|process]
+  ${chalk.bold('Other:')}      interview
   ${chalk.bold('Shell:')}      help, clear, exit
 `));
 }

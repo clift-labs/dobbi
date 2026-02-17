@@ -5,6 +5,7 @@
 import type { Context } from '../context/context.js';
 import type { ProcessNode } from './node.js';
 import type { Edge } from './edge.js';
+import type { ProcessToolMeta } from './process-json-hydrator.js';
 
 /**
  * The complete process definition: key, description, nodes, edges,
@@ -13,6 +14,7 @@ import type { Edge } from './edge.js';
 export interface Process {
     readonly key: string;
     readonly description: string;
+    readonly tool?: ProcessToolMeta;
     readonly context: Context;
     readonly nodes: ProcessNode[];
     readonly edges: Edge[];

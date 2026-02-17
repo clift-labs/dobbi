@@ -1,6 +1,7 @@
 import type { Task, TaskStep, TaskLogger, TaskLogEntry, LogLevel, Canvas } from '../protocol.js';
 import { QueueManager, getQueueManager } from './manager.js';
 import { getServiceTool, type ServiceToolExecutionContext, type ServiceTool, type LLMProxy } from '../../tools/types.js';
+import { bootstrapFeral } from '../../feral/bootstrap.js';
 import { ContextProvider } from '../context/provider.js';
 import { getModelForCapability, createDobbieSystemPrompt } from '../../llm/router.js';
 import { z, type ZodTypeAny } from 'zod';
@@ -195,8 +196,9 @@ export class QueueProcessor {
         try {
             logger.info(`Starting step: ${step.toolName}`);
 
-            // Look up the service tool
-            const tool = getServiceTool(step.toolName);
+            // Look up the service tool — Feral registry first, then manual registry
+            const feral = await bootstrapFeral();
+            const tool = feral.toolRegistry.getTool(step.toolName) ?? getServiceTool(step.toolName);
 
             if (!tool) {
                 throw new Error(`Tool not found: ${step.toolName}`);

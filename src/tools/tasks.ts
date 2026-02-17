@@ -1,269 +1,67 @@
-import path from 'path';
-import { promises as fs } from 'fs';
 import {
-    type TaskEntity,
     type TaskStatus,
     type TaskPriority,
-    slugify,
-    createEntityMeta,
-    ensureEntityDir,
     findEntityByTitle,
     listEntities,
-    writeEntity,
 } from '../entities/entity.js';
-import { getActiveProject } from '../state/manager.js';
 import { registerServiceTool, type ServiceToolResult } from './types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TASKS.ADD - Create a new task
-// ─────────────────────────────────────────────────────────────────────────────
-
-registerServiceTool({
-    name: 'tasks.add',
-    description: 'Create a new task in the current project',
-    type: 'deterministic',
-    inputSchema: {
-        type: 'object',
-        properties: {
-            title: { type: 'string', description: 'Task title', required: true },
-            content: { type: 'string', description: 'Task description' },
-            priority: { type: 'string', description: 'Priority: low, medium, high, critical' },
-            dueDate: { type: 'string', description: 'Due date (YYYY-MM-DD)' },
-            tags: { type: 'array', description: 'Tags' },
-        },
-        required: ['title'],
-    },
-    execute: async (input, context): Promise<ServiceToolResult> => {
-        const { title, content = '', priority = 'medium', dueDate, tags = [] } = input as {
-            title: string;
-            content?: string;
-            priority?: TaskPriority;
-            dueDate?: string;
-            tags?: string[];
-        };
-
-        context.log.info(`Creating task: ${title}`);
-
-        const project = await getActiveProject();
-        if (!project) {
-            return { success: false, output: null, error: 'No active project' };
-        }
-
-        const existing = await findEntityByTitle('task', title);
-        if (existing) {
-            context.log.warn(`Task already exists: ${title}`);
-            return { success: false, output: null, error: `Task "${title}" already exists` };
-        }
-
-        const todosDir = await ensureEntityDir('task');
-        const slug = slugify(title);
-        const filepath = path.join(todosDir, `${slug}.md`);
-
-        const meta: TaskEntity = {
-            ...createEntityMeta('task', title, { tags, project }),
-            entityType: 'task',
-            status: 'open',
-            priority,
-            dueDate,
-        };
-
-        await writeEntity(filepath, { ...meta }, content);
-
-        context.log.info(`Task created: ${filepath}`);
-
-        return {
-            success: true,
-            output: { filepath, title, content, priority, dueDate, status: 'open' },
-            canvasUpdate: {
-                type: 'todo',
-                title,
-                content,
-                metadata: { priority, dueDate, status: 'open' },
-                dirty: false,
-            },
-        };
-    },
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TASKS.UPDATE - Update a task
-// ─────────────────────────────────────────────────────────────────────────────
-
-registerServiceTool({
-    name: 'tasks.update',
-    description: 'Update an existing task',
-    type: 'deterministic',
-    inputSchema: {
-        type: 'object',
-        properties: {
-            title: { type: 'string', description: 'Task title to update', required: true },
-            content: { type: 'string', description: 'New description' },
-            status: { type: 'string', description: 'Status: open, in-progress, done, blocked' },
-            priority: { type: 'string', description: 'Priority: low, medium, high, critical' },
-            dueDate: { type: 'string', description: 'Due date (YYYY-MM-DD)' },
-            tags: { type: 'array', description: 'Replace tags' },
-        },
-        required: ['title'],
-    },
-    execute: async (input, context): Promise<ServiceToolResult> => {
-        const { title, content, status, priority, dueDate, tags } = input as {
-            title: string;
-            content?: string;
-            status?: TaskStatus;
-            priority?: TaskPriority;
-            dueDate?: string;
-            tags?: string[];
-        };
-
-        context.log.info(`Updating task: ${title}`);
-
-        const found = await findEntityByTitle('task', title);
-        if (!found) {
-            context.log.error(`Task not found: ${title}`);
-            return { success: false, output: null, error: `Task "${title}" not found` };
-        }
-
-        const newContent = content !== undefined ? content : found.content;
-
-        if (status !== undefined) found.meta.status = status;
-        if (priority !== undefined) found.meta.priority = priority;
-        if (dueDate !== undefined) found.meta.dueDate = dueDate;
-        if (tags) found.meta.tags = tags;
-
-        await writeEntity(found.filepath, found.meta, newContent);
-
-        context.log.info(`Task updated: ${found.filepath}`);
-
-        return {
-            success: true,
-            output: {
-                filepath: found.filepath,
-                title: found.meta.title,
-                content: newContent,
-                status: found.meta.status,
-                priority: found.meta.priority,
-                dueDate: found.meta.dueDate,
-            },
-        };
-    },
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TASKS.REMOVE - Delete a task
-// ─────────────────────────────────────────────────────────────────────────────
-
-registerServiceTool({
-    name: 'tasks.remove',
-    description: 'Delete a task',
-    type: 'deterministic',
-    inputSchema: {
-        type: 'object',
-        properties: {
-            title: { type: 'string', description: 'Task title to delete', required: true },
-        },
-        required: ['title'],
-    },
-    execute: async (input, context): Promise<ServiceToolResult> => {
-        const { title } = input as { title: string };
-
-        context.log.info(`Removing task: ${title}`);
-
-        const found = await findEntityByTitle('task', title);
-        if (!found) {
-            context.log.error(`Task not found: ${title}`);
-            return { success: false, output: null, error: `Task "${title}" not found` };
-        }
-
-        await fs.unlink(found.filepath);
-
-        context.log.info(`Task removed: ${found.filepath}`);
-
-        return {
-            success: true,
-            output: { filepath: found.filepath, title: found.meta.title, deleted: true },
-        };
-    },
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TASKS.REVIEW - Review a task with AI
+// TASKS.REVIEW — AI review (needs LLM proxy, stays as service tool)
 // ─────────────────────────────────────────────────────────────────────────────
 
 registerServiceTool({
     name: 'tasks.review',
-    description: 'Review a task with AI to break it down or clarify',
+    description: 'Review tasks with AI for prioritization advice',
     type: 'ai',
     capability: 'reason',
     inputSchema: {
         type: 'object',
         properties: {
-            title: { type: 'string', description: 'Task title to review', required: true },
-            action: { type: 'string', description: 'Action: breakdown, clarify, estimate' },
+            onlyOverdue: { type: 'boolean', description: 'Focus on overdue tasks' },
         },
-        required: ['title'],
     },
     execute: async (input, context): Promise<ServiceToolResult> => {
-        const { title, action = 'breakdown' } = input as { title: string; action?: string };
+        const { onlyOverdue = false } = input as { onlyOverdue?: boolean };
 
-        context.log.info(`Reviewing task: ${title} (${action})`);
+        context.log.info('Reviewing tasks with AI');
 
-        const found = await findEntityByTitle('task', title);
-        if (!found) {
-            context.log.error(`Task not found: ${title}`);
-            return { success: false, output: null, error: `Task "${title}" not found` };
+        const entities = await listEntities('task');
+        const tasks = entities
+            .filter(e => e.meta.status !== 'done')
+            .filter(e => {
+                if (!onlyOverdue) return true;
+                const due = e.meta.dueDate as string | undefined;
+                return due && new Date(due) < new Date();
+            })
+            .map(e => ({
+                title: e.meta.title as string,
+                status: e.meta.status as string,
+                priority: e.meta.priority as string,
+                dueDate: e.meta.dueDate as string | undefined,
+                tags: (e.meta.tags as string[]) || [],
+            }));
+
+        if (tasks.length === 0) {
+            return { success: true, output: 'No open tasks to review.' };
         }
 
-        const fullContext = await context.ctx.getFullContext('todos');
+        const taskList = tasks.map(t => {
+            const parts = [`- ${t.title} [${t.status}/${t.priority}]`];
+            if (t.dueDate) parts[0] += ` due: ${t.dueDate}`;
+            return parts[0];
+        }).join('\n');
 
-        let prompt: string;
-        switch (action) {
-            case 'clarify':
-                prompt = `Please analyze this task and ask clarifying questions to ensure it's well-defined.
-
-Task: ${found.meta.title}
-Description: ${found.content}
-Priority: ${found.meta.priority}
-Status: ${found.meta.status}
-${found.meta.dueDate ? `Due: ${found.meta.dueDate}` : ''}
-
-What questions should we answer to make this task clearer?`;
-                break;
-            case 'estimate':
-                prompt = `Please estimate the time and effort needed for this task.
-
-Task: ${found.meta.title}
-Description: ${found.content}
-Priority: ${found.meta.priority}
-
-Provide an estimate with assumptions.`;
-                break;
-            case 'breakdown':
-            default:
-                prompt = `Please break down this task into smaller, actionable subtasks.
-
-Task: ${found.meta.title}
-Description: ${found.content}
-Priority: ${found.meta.priority}
-
-Provide a numbered list of subtasks.`;
-        }
-
-        const review = await context.llm.chat([
-            { role: 'system', content: fullContext.combined },
-            { role: 'user', content: prompt },
+        const response = await context.llm.chat([
+            { role: 'user', content: `Please review these tasks and provide prioritization advice:\n\n${taskList}` },
         ]);
 
-        context.log.info('Review completed');
-
-        return {
-            success: true,
-            output: { title: found.meta.title, content: found.content, action, review },
-        };
+        return { success: true, output: response };
     },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TASKS.LIST - List all tasks
+// TASKS.LIST — Custom logic (filtering/sorting), stays as service tool
 // ─────────────────────────────────────────────────────────────────────────────
 
 registerServiceTool({

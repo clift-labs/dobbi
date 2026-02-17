@@ -88,12 +88,12 @@ describe('Combined Catalog', () => {
 });
 
 describe('bootstrapFeral', () => {
-    it('should create a fully wired runtime with all 39 built-in node codes', async () => {
+    it('should create a fully wired runtime with all 41 built-in node codes', async () => {
         const runtime = await bootstrapFeral();
 
-        // NodeCodeFactory should have all 39 built-ins
+        // NodeCodeFactory should have all 41 built-ins
         const nodeCodes = runtime.nodeCodeFactory.getAllNodeCodes();
-        expect(nodeCodes.length).toBe(39);
+        expect(nodeCodes.length).toBe(41);
 
         // Catalog should have at least 37 CatalogNodes (built-in) + Slack + Agent + Entity catalog sources
         const catalogNodes = runtime.catalog.getAllCatalogNodes();

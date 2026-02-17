@@ -19,6 +19,7 @@ import { EventDispatcher } from './events/event-dispatcher.js';
 import { ProcessEngine } from './engine/process-engine.js';
 import { ProcessFactory } from './process/process-factory.js';
 import { Runner } from './runner/runner.js';
+import { FeralToolRegistry } from './feral-tool-registry.js';
 import type { ProcessSource } from './process/process-factory.js';
 
 // Built-in node codes
@@ -72,6 +73,12 @@ import { LoadVaultContextNodeCode } from './node-code/entity/load-vault-context-
 import { SlackCatalogSource } from './catalog/slack-catalog-source.js';
 import { AgentCatalogSource } from './catalog/agent-catalog-source.js';
 import { EntityCatalogSource } from './catalog/entity-catalog-source.js';
+import { SystemCatalogSource } from './catalog/system-catalog-source.js';
+import { OutputCatalogSource } from './catalog/output-catalog-source.js';
+
+// System & output node codes
+import { CliCommandNodeCode } from './node-code/system/cli-command-node-code.js';
+import { DobbieSpeakNodeCode } from './node-code/output/dobbie-speak-node-code.js';
 
 // Process sources
 import { JsonProcessSource } from './process/json-process-source.js';
@@ -125,6 +132,9 @@ function getBuiltInNodeCodes(): NodeCode[] {
         new DeleteEntityNodeCode(),
         new SortEntitiesNodeCode(),
         new LoadVaultContextNodeCode(),
+        // System & output
+        new CliCommandNodeCode(),
+        new DobbieSpeakNodeCode(),
     ];
 }
 
@@ -138,6 +148,7 @@ export interface FeralRuntime {
     readonly engine: ProcessEngine;
     readonly processFactory: ProcessFactory;
     readonly runner: Runner;
+    readonly toolRegistry: FeralToolRegistry;
 }
 
 /**
@@ -165,6 +176,8 @@ export async function bootstrapFeral(
         new SlackCatalogSource(),
         new AgentCatalogSource(),
         new EntityCatalogSource(),
+        new SystemCatalogSource(),
+        new OutputCatalogSource(),
     ]);
 
     // 4. Load process definitions from ~/.dobbie/processes/
@@ -178,6 +191,9 @@ export async function bootstrapFeral(
     const processFactory = new ProcessFactory([jsonProcessSource, ...processSources]);
     const runner = new Runner(processFactory, engine);
 
+    // 6. Tool registry — auto-generates ServiceTools from process metadata
+    const toolRegistry = new FeralToolRegistry(processFactory, runner);
+
     return {
         nodeCodeFactory,
         catalog,
@@ -185,5 +201,6 @@ export async function bootstrapFeral(
         engine,
         processFactory,
         runner,
+        toolRegistry,
     };
 }

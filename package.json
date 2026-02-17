@@ -1,6 +1,6 @@
 {
   "name": "dobbie",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "description": "AI-powered notes system with hierarchical context",
   "type": "module",
   "main": "dist/index.js",

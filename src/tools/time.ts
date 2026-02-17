@@ -1,7 +1,8 @@
+import { bootstrapFeral } from '../feral/bootstrap.js';
 import { registerServiceTool, type ServiceToolResult } from './types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TIME TOOL (V2)
+// TIME TOOL (V2) — Feral-backed
 // ─────────────────────────────────────────────────────────────────────────────
 
 registerServiceTool({
@@ -9,23 +10,15 @@ registerServiceTool({
     description: 'Shows the current local time',
     type: 'deterministic',
     execute: async (_input, context): Promise<ServiceToolResult> => {
-        const now = new Date();
-        const timeString = now.toLocaleString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            timeZoneName: 'short',
-        });
+        const feral = await bootstrapFeral();
+        const ctx = await feral.runner.run('system.time');
+        const time = ctx.getString('current_time');
 
-        context.log.info(`Current time: ${timeString}`);
+        context.log.info(`Current time: ${time}`);
 
         return {
             success: true,
-            output: `The current time is: ${timeString}`,
+            output: `The current time is: ${time}`,
         };
     },
 });

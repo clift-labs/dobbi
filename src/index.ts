@@ -20,6 +20,7 @@ import { serviceCommand, queueCommand, indexCommand } from './commands/service.j
 import { createShellCommand } from './commands/shell.js';
 import { feralCommand } from './commands/feral.js';
 import { interviewCommand } from './commands/interview.js';
+import { timeCommand } from './commands/time.js';
 import { listServiceTools, getServiceTool } from './tools/index.js';
 import { bootstrapFeral } from './feral/bootstrap.js';
 
@@ -28,7 +29,7 @@ export const program = new Command();
 program
   .name('dobbie')
   .description(chalk.cyan('🧝 Dobbie - Your helpful AI notes assistant'))
-  .version('1.0.0');
+  .version('3.0.0');
 
 // Register commands
 program.addCommand(initCommand);
@@ -50,6 +51,7 @@ program.addCommand(queueCommand);
 program.addCommand(indexCommand);
 program.addCommand(feralCommand);
 program.addCommand(interviewCommand);
+program.addCommand(timeCommand);
 program.addCommand(createShellCommand(program));
 
 // Tool command - run any registered tool
@@ -73,8 +75,38 @@ program
       return;
     }
 
-    console.log(chalk.gray(`Running ${tool.name} (V2 service tool)...`));
-    console.log(chalk.gray('Note: Service tools require the daemon to be running for full functionality.'));
+    console.log(chalk.gray(`Running ${tool.name}...`));
+
+    // Build a minimal execution context for direct CLI use
+    const logger = {
+      debug: (msg: string) => console.log(chalk.gray(`  [debug] ${msg}`)),
+      info: (msg: string) => console.log(chalk.gray(`  [info]  ${msg}`)),
+      warn: (msg: string) => console.log(chalk.yellow(`  [warn]  ${msg}`)),
+      error: (msg: string) => console.log(chalk.red(`  [error] ${msg}`)),
+    };
+    const noopLlm = { chat: async () => '(LLM not available in direct CLI mode)' };
+    const parsedInput = input ? JSON.parse(input) : {};
+
+    try {
+      const result = await tool.execute(parsedInput, {
+        taskId: 'cli-direct',
+        stepId: 'cli-direct',
+        ctx: {} as any,
+        previousOutputs: [],
+        log: logger,
+        llm: noopLlm as any,
+      });
+      if (result.success) {
+        console.log(chalk.green('\n  ✓ Success'));
+        if (result.output) {
+          console.log(chalk.white(`  ${typeof result.output === 'string' ? result.output : JSON.stringify(result.output, null, 2)}`));
+        }
+      } else {
+        console.log(chalk.red(`\n  ✗ ${result.error || 'Unknown error'}`));
+      }
+    } catch (err) {
+      console.log(chalk.red(`\n  ✗ ${err instanceof Error ? err.message : err}`));
+    }
   });
 
 // Tools list command

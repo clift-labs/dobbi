@@ -27,6 +27,8 @@ const COMMAND_TREE: Record<string, string[]> = {
     task: ['list'],
     event: ['list'],
     research: ['list'],
+    goal: ['list'],
+    time: [],
     recurrence: ['create', 'list', 'edit', 'delete', 'generate'],
     person: ['list', 'edit', 'delete'],
     inbox: ['add'],
@@ -241,9 +243,9 @@ function printShellHelp(): void {
     console.log(chalk.cyan(`
 ${chalk.bold('Available Commands:')}
 
-  ${chalk.bold('Vault:')}      init, sync, today, week [--next]
+  ${chalk.bold('Vault:')}      init, sync, today, week [--next], time
   ${chalk.bold('Projects:')}   project [list|switch|new]
-  ${chalk.bold('Memory:')}     note, todo, task, event, research, recurrence, person, inbox [add], remember
+  ${chalk.bold('Memory:')}     note, todo, task, event, goal, research, recurrence, person, inbox [add], remember
   ${chalk.bold('Index:')}      index [stats|graph|neighbors|rebuild]
   ${chalk.bold('Config:')}     config [add-provider|set-capability|list-capabilities|list-providers|set-name]
   ${chalk.bold('Service:')}    service [start|stop|status]

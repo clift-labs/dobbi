@@ -230,7 +230,7 @@ export async function writeEntity(
 
 /**
  * Move an entity file to the trash instead of permanently deleting it.
- * Trash location: ~/.dobbie/.trash/<entity-dir>/<filename>
+ * Trash location: <vaultRoot>/.trash/<entity-dir>/<filename>
  * If a file with the same name exists in trash, appends a timestamp.
  */
 export async function trashEntity(filepath: string): Promise<string> {

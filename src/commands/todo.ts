@@ -332,6 +332,36 @@ export const todoCommand = new Command('todo')
                 return;
             }
 
+            // Handle: dobbie todo done <title>
+            if (words[0] === 'done') {
+                const doneTitle = words.slice(1).join(' ');
+                if (!doneTitle) {
+                    console.log(chalk.yellow('\n  Please specify which task to complete: todo done <title>\n'));
+                    return;
+                }
+                const project = await requireProject();
+                const existing = await findExistingTodo(project, doneTitle);
+                if (!existing) {
+                    console.log(chalk.red(`\n  ✗ Task "${doneTitle}" not found\n`));
+                    return;
+                }
+                const doneState: TodoState = {
+                    title: existing.title,
+                    content: existing.content,
+                    project,
+                    priority: existing.priority as 'low' | 'medium' | 'high',
+                    dueDate: existing.dueDate,
+                    filepath: existing.filepath,
+                    isExisting: true,
+                    completed: true,
+                };
+                const filepath = await saveTodo(doneState);
+                const msg = await getPersonalizedResponse('task_complete');
+                console.log(chalk.green(`\n  ✓ ${msg}`));
+                console.log(chalk.gray(`    ${filepath}\n`));
+                return;
+            }
+
             // Require a project
             const project = await requireProject();
 

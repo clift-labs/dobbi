@@ -4,6 +4,8 @@ An AI-powered personal assistant that lives in your terminal. Dobbi manages your
 
 Think of it as a loyal house-elf for your digital life: polite, eager, and surprisingly capable.
 
+> **Requires an API key from [OpenAI](https://platform.openai.com) and/or [Anthropic](https://console.anthropic.com).**
+
 ```
                                .......
                             .:------::::...
@@ -59,9 +61,9 @@ npm link
 
 ## What Dobbi Does
 
-Dobbi manages **entities** — structured Markdown files with YAML frontmatter — organized into projects inside your vault (`~/.dobbi/` by default).
+All of your information stays **local** — stored as plain Markdown files with YAML frontmatter, organized into structured content types within your vault (`~/.dobbi/` by default). Dobbi comes with built-in content types for common needs, and can create new ones on the fly when he needs a new way to store information for his human.
 
-### Entity Types
+### Content Types
 
 | Type | Description |
 |------|-------------|
@@ -123,25 +125,21 @@ Run `dobbi` with no arguments to enter the interactive shell, or use commands di
 | `dobbi service start` | Start the background service + web UI |
 | `dobbi shell` | Enter interactive mode (same as no args) |
 
-## Configuration
+## BYOK (Bring Your Own Key)
 
-### API Keys
-
-Dobbi needs at least one LLM provider. Add your key and Dobbi auto-selects the best model for each task:
+Dobbi doesn't come with an API key — you bring your own from [OpenAI](https://platform.openai.com) and/or [Anthropic](https://console.anthropic.com). Your keys are stored locally in `~/.dobbi/secrets.json` and never leave your machine.
 
 ```bash
-# Option A: OpenAI
+# Add OpenAI
 dobbi config add-provider openai
 
-# Option B: Anthropic
+# Add Anthropic
 dobbi config add-provider anthropic
 
 # Or both — Dobbi will use each provider's strengths
 ```
 
-### How Model Selection Works
-
-Dobbi maps six **capabilities** to the optimal model per provider:
+When both providers are configured, Dobbi automatically picks the best model for each task based on six **capabilities**:
 
 | Capability | What it does | OpenAI default | Anthropic default |
 |------------|-------------|----------------|-------------------|
@@ -152,17 +150,12 @@ Dobbi maps six **capabilities** to the optimal model per provider:
 | format | Text formatting | gpt-4o-mini | claude-haiku-4-5 |
 | embed | Vector embeddings | text-embedding-3-small | *(not supported)* |
 
-When both providers are configured, Dobbi picks the best provider per capability automatically. You can override any mapping:
+You can override any mapping:
 
 ```bash
 dobbi config set-capability reason anthropic claude-sonnet-4-6
 dobbi config reset-capability reason   # restore auto-selection
-```
-
-View your current configuration:
-
-```bash
-dobbi config
+dobbi config                           # view current configuration
 ```
 
 ### Where Things Live

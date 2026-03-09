@@ -19,6 +19,7 @@ export class UpdateEntityNodeCode extends AbstractNodeCode {
         { key: 'entity_title', name: 'Entity Title', description: 'Title of the entity to update. Supports {context_key} interpolation. Sets "title" in context.', type: 'string', isOptional: true },
         { key: 'entity_body', name: 'Entity Body', description: 'New body/content for the entity. Supports {context_key} interpolation. Sets "content" in context.', type: 'string', isOptional: true },
         { key: 'patch_fields', name: 'Patch Fields', description: 'Comma-separated context keys to merge into entity metadata (e.g. status,priority,dueDate).', type: 'string', default: '', isOptional: true },
+        { key: 'add_tags', name: 'Add Tags', description: 'Comma-separated tags to append to the entity (preserves existing tags). E.g. "year-of-the-house,outdoor".', type: 'string', isOptional: true },
     ];
     static readonly resultDescriptions: ResultDescription[] = [
         { status: ResultStatus.OK, description: 'Entity updated successfully.' },
@@ -84,9 +85,20 @@ export class UpdateEntityNodeCode extends AbstractNodeCode {
             }
         }
 
-        // Merge tags if provided
-        const tags = context.get('tags') as string[] | undefined;
-        if (tags) found.meta.tags = tags;
+        // Append tags from add_tags config (preserves existing)
+        const addTagsStr = this.getOptionalConfigValue('add_tags') as string | null;
+        if (addTagsStr) {
+            const newTags = addTagsStr.split(',').map(t => this.interpolate(t.trim(), context)).filter(Boolean);
+            const existing = Array.isArray(found.meta.tags) ? found.meta.tags as string[] : [];
+            const merged = [...new Set([...existing, ...newTags])];
+            found.meta.tags = merged;
+        }
+
+        // Replace tags if explicitly set in context (only when add_tags is not used)
+        if (!addTagsStr) {
+            const tags = context.get('tags') as string[] | undefined;
+            if (tags) found.meta.tags = tags;
+        }
 
         await writeEntity(found.filepath, found.meta, content);
 

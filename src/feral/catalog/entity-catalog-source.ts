@@ -36,6 +36,26 @@ export class EntityCatalogSource implements CatalogSource {
             configuration: { context_path: 'entities' },
         });
 
+        // Create new entity type — lets the LLM design and register custom content types
+        nodes.push({
+            key: 'create_content_type',
+            nodeCodeKey: 'create_entity_type',
+            name: 'Create Content Type',
+            group: 'entity',
+            description: 'Creates a new content type (entity type) with LLM-designed fields. Use when the user mentions a kind of thing Dobbi doesn\'t have yet (e.g. "recipe", "habit", "bookmark"). Requires type_name (singular slug) and description (what it represents).',
+            configuration: {},
+        });
+
+        // Link entities — adds a labeled relationship between two entities
+        nodes.push({
+            key: 'link_entities',
+            nodeCodeKey: 'link_entities',
+            name: 'Link Entities',
+            group: 'entity',
+            description: 'Creates a labeled link from one entity to another (e.g. a task "blocks" another task, a goal "relates-to" a note). Requires source_entity_type, source_entity_title, target_entity_type, target_entity_title, and label.',
+            configuration: {},
+        });
+
         // Hardcoded recurring task node — always available regardless of entity types
         nodes.push({
             key: 'create_recurring_task',
@@ -178,6 +198,19 @@ export class EntityCatalogSource implements CatalogSource {
                 system_prompt: `You are a curious analyst. Given a ${type}, generate insightful questions that probe for gaps, unstated assumptions, and next steps. Be concise and number your questions.\n\nContext:\n{vault_context}`,
                 prompt: `Here is a ${type}:\n\n{entity}\n\nWhat questions should be asked about this ${type}?`,
                 response_context_path: 'llm_response',
+            },
+        });
+
+        // Add tag — convenience node for appending tags without replacing
+        nodes.push({
+            key: `add_tag_${type}`,
+            nodeCodeKey: 'update_entity',
+            name: `Add Tag to ${cap(type)}`,
+            group: 'entity',
+            description: `Appends one or more tags to an existing ${type} without removing existing tags. Set add_tags to a comma-separated list of tags. Uses entity_title (supports {title} interpolation) to find the entity.`,
+            configuration: {
+                entity_type: type,
+                entity_title: '{title}',
             },
         });
 

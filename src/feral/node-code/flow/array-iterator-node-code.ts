@@ -47,6 +47,14 @@ export class ArrayIteratorNodeCode extends AbstractNodeCode {
             default: 'true',
             isOptional: true,
         },
+        {
+            key: 'max_iterations',
+            name: 'Max Iterations',
+            description: 'Maximum number of items to iterate over. Omit or set to 0 for no limit.',
+            type: 'string',
+            default: '0',
+            isOptional: true,
+        },
     ];
 
     static readonly resultDescriptions: ResultDescription[] = [
@@ -68,6 +76,7 @@ export class ArrayIteratorNodeCode extends AbstractNodeCode {
         const cursorPath = this.getRequiredConfigValue('cursor_context_path', '_iterator_cursor') as string;
         const itemPath = this.getOptionalConfigValue('item_context_path', '_current_item') as string;
         const spreadFields = (this.getOptionalConfigValue('spread_fields', 'true') as string) === 'true';
+        const maxIterations = parseInt(this.getOptionalConfigValue('max_iterations', '0') as string, 10) || 0;
 
         const arr = context.getArray(sourcePath);
 
@@ -78,7 +87,7 @@ export class ArrayIteratorNodeCode extends AbstractNodeCode {
         // Read or initialize cursor
         const cursor = context.has(cursorPath) ? context.getInt(cursorPath) : 0;
 
-        if (cursor >= arr.length) {
+        if (cursor >= arr.length || (maxIterations > 0 && cursor >= maxIterations)) {
             // Reset cursor for potential re-use and signal done
             context.set(cursorPath, 0);
             return this.result(DONE, `Iterated all ${arr.length} items.`);

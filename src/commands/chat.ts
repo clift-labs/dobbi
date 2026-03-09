@@ -18,6 +18,7 @@ import type { ProcessSource } from '../feral/process/process-factory.js';
 import type { Process } from '../feral/process/process.js';
 import { getModelForCapability, createDobbiSystemPrompt } from '../llm/router.js';
 import { debug } from '../utils/debug.js';
+import { ChatLogger, generateChatId } from '../utils/chat-logger.js';
 import { loadEntityTypes } from '../entities/entity-type-config.js';
 import { getActiveProject, getUserName } from '../state/manager.js';
 import { getProjectContext } from '../context/reader.js';
@@ -90,6 +91,62 @@ const EXAMPLE_PROCESSES = [
         },
     },
     {
+        description: 'Tag filter: list only tasks that have a specific tag',
+        json: {
+            schema_version: 1,
+            key: 'tasks.by_tag',
+            description: 'List all tasks with the "home" tag',
+            context: {},
+            nodes: [
+                { key: 'start', catalog_node_key: 'start', configuration: {}, edges: { ok: 'list' } },
+                { key: 'list', catalog_node_key: 'list_tasks', configuration: { tags: 'home' }, edges: { ok: 'done' } },
+                { key: 'done', catalog_node_key: 'stop', configuration: {}, edges: {} },
+            ],
+        },
+    },
+    {
+        description: 'Complete a task: find it by title and mark it as done',
+        json: {
+            schema_version: 1,
+            key: 'task.complete',
+            description: 'Mark a task as done',
+            context: {},
+            nodes: [
+                { key: 'start', catalog_node_key: 'start', configuration: {}, edges: { ok: 'complete' } },
+                { key: 'complete', catalog_node_key: 'complete_task', configuration: { entity_title: 'Buy groceries' }, edges: { ok: 'done', not_found: 'done', error: 'done' } },
+                { key: 'done', catalog_node_key: 'stop', configuration: {}, edges: {} },
+            ],
+        },
+    },
+    {
+        description: 'Link two entities: connect a task to a goal',
+        json: {
+            schema_version: 1,
+            key: 'link.task_to_goal',
+            description: 'Link a task to a related goal',
+            context: {},
+            nodes: [
+                { key: 'start', catalog_node_key: 'start', configuration: {}, edges: { ok: 'link' } },
+                { key: 'link', catalog_node_key: 'link_entities', configuration: { source_entity_type: 'task', source_entity_title: 'Fix the fence', target_entity_type: 'goal', target_entity_title: 'Home improvement', label: 'contributes-to' }, edges: { ok: 'done', not_found: 'done', error: 'done' } },
+                { key: 'done', catalog_node_key: 'stop', configuration: {}, edges: {} },
+            ],
+        },
+    },
+    {
+        description: 'Create a new content type for something Dobbi doesn\'t track yet',
+        json: {
+            schema_version: 1,
+            key: 'type.create',
+            description: 'Create a recipe content type',
+            context: {},
+            nodes: [
+                { key: 'start', catalog_node_key: 'start', configuration: {}, edges: { ok: 'create_type' } },
+                { key: 'create_type', catalog_node_key: 'create_content_type', configuration: { type_name: 'recipe', description: 'A cooking recipe with ingredients, instructions, prep time, and servings' }, edges: { ok: 'done', already_exists: 'done', error: 'done' } },
+                { key: 'done', catalog_node_key: 'stop', configuration: {}, edges: {} },
+            ],
+        },
+    },
+    {
         description: 'While loop: list tasks, iterate over each one, and use LLM to add a summary to each task body',
         json: {
             schema_version: 1,
@@ -116,11 +173,34 @@ export async function feralChatHeadless(
     onStatus?: (status: string) => void,
     onProcess?: (processJson: Record<string, unknown>) => void,
     onQuestion?: (question: string, options?: string[]) => Promise<string>,
+    onChatId?: (chatId: string) => void,
 ): Promise<string> {
     const status = (s: string) => onStatus?.(s);
+    const chatId = generateChatId();
+    const logger = new ChatLogger(chatId);
+
+    // Fire the chat ID callback immediately so callers can display/send it
+    onChatId?.(chatId);
 
     status('Dobbi is thinking…');
 
+    try { return await _feralChatHeadlessInner(userInput, status, onProcess, onQuestion, logger, chatId); }
+    catch (error) {
+        await logger.log('error', { message: error instanceof Error ? error.message : String(error) });
+        throw error;
+    } finally {
+        logger.close();
+    }
+}
+
+async function _feralChatHeadlessInner(
+    userInput: string,
+    status: (s: string) => void,
+    onProcess: ((processJson: Record<string, unknown>) => void) | undefined,
+    onQuestion: ((question: string, options?: string[]) => Promise<string>) | undefined,
+    logger: ChatLogger,
+    chatId: string,
+): Promise<string> {
     // ── Bootstrap Feral + load entity types + vault context ────────
     const inMemorySource = new InMemoryProcessSource();
     const [runtime, entityTypes, activeProject, userName] = await Promise.all([
@@ -129,6 +209,8 @@ export async function feralChatHeadless(
         getActiveProject().catch(() => null),
         getUserName().catch(() => 'friend'),
     ]);
+
+    await logger.log('start', { chatId, userInput, activeProject });
 
     // Load project vault context (.socks.md chain) if a project is active
     // Scrub any secrets that may have been accidentally pasted into .socks.md files
@@ -176,11 +258,19 @@ ${entityTypes.map(t => {
     return `- ${t.name} (plural: ${t.plural})${t.description ? ` — ${t.description}` : ''}.${fieldDesc}`;
 }).join('\n')}
 
-Each entity type has create_*, list_*, find_*, update_*, delete_* catalog nodes, plus set_${'{type}'}_{field} nodes for each field.
-For example: create_task, list_tasks, find_note, set_task_status, etc.
+Each entity type has create_*, list_*, find_*, update_*, delete_*, complete_* catalog nodes, plus set_${'{type}'}_{field} nodes for each field.
+For example: create_task, list_tasks, find_note, set_task_status, complete_task, etc.
+
+IMPORTANT CAPABILITIES:
+- To filter entities by tag, use the "tags" config on list_* or search_* nodes (comma-separated tag names).
+- To mark an entity as done/complete, use the complete_* node (e.g. complete_task).
+- To create a NEW content type the user mentions (e.g. "recipe", "habit", "bookmark"), use "create_content_type".
+- To link two entities together (e.g. a task relates to a goal), use "link_entities".
+- To add tags to an existing entity, use the add_tag_* nodes (e.g. add_tag_task).
 
 When the user's request implies creating entities, ALWAYS select the appropriate create_* nodes.
 When the user mentions multiple entities, select multiple create_* nodes.
+When the user refers to a content type that doesn't exist yet, select "create_content_type".
 
 Here are all available catalog nodes in the Feral process engine. Each node performs a specific action:
 
@@ -191,9 +281,13 @@ IMPORTANT RULES:
 - Always include "start" and "stop" in your selection
 - The "llm_chat" node sends a prompt to an LLM. It supports {context_key} interpolation in prompts
 - Only select nodes that are directly useful for fulfilling the user's request
-- Prefer entity nodes (list_*, find_*, create_*) for data operations
+- Prefer entity nodes (list_*, find_*, create_*, complete_*) for data operations
 - Prefer system nodes (get_time, get_date, etc.) for system information
 - When the user wants to CREATE something, use the create_* nodes — don't just use llm_chat to give advice
+- When the user wants to mark something as done/complete, use complete_* nodes (e.g. complete_task)
+- When the user asks about entities by tag, use list_* or search_* with the "tags" config
+- When the user mentions a content type that doesn't exist, select "create_content_type"
+- When the user wants to relate or connect entities, select "link_entities"
 
 Return a JSON object with this exact structure:
 {
@@ -213,10 +307,13 @@ Return ONLY the JSON object, no markdown fences.`,
 
     let nodeSelection: { reasoning: string; nodes: string[] };
     try {
-        nodeSelection = JSON.parse(cleanJson(step1Response));
-    } catch {
-        throw new Error('Failed to parse node selection from LLM');
+        nodeSelection = parseJsonResponse(step1Response) as { reasoning: string; nodes: string[] };
+    } catch (err) {
+        debug('chat', `Step 1 raw response: ${step1Response}`);
+        throw new Error(`Failed to parse node selection from LLM: ${err instanceof Error ? err.message : err}`);
     }
+
+    await logger.log('node_selection', { reasoning: nodeSelection.reasoning, nodes: nodeSelection.nodes });
 
     // Ensure start/stop are included
     if (!nodeSelection.nodes.includes('start')) nodeSelection.nodes.unshift('start');
@@ -315,21 +412,28 @@ PROCESS FORMAT RULES:
 9. Keep the process as simple as possible — prefer fewer nodes
 10. For entity creation, ALWAYS set entity_title and entity_body in the configuration with concrete values
 11. Use the vault context to inform entity content — respect project goals and conventions
+12. To filter by tag, set "tags" in configuration (comma-separated), e.g. { "tags": "year-of-the-house" }
+13. To link entities, use link_entities with source_entity_type, source_entity_title, target_entity_type, target_entity_title, and label
+14. To complete/finish an entity, use the complete_* catalog node (e.g. complete_task)
+15. ONLY use configuration keys that appear in the NODE CONFIGURATION DETAILS above — do not invent keys
 
 EXAMPLE PROCESSES:
 ${examplesStr}
 
 Return a JSON object with this exact structure:
 {
-    "reasoning": "Why this process structure was chosen",
+    "reasoning": "One short sentence",
     "process": { ... the process JSON ... }
 }
+
+IMPORTANT: Keep "reasoning" to ONE sentence. The process JSON is what matters.
 
 Return ONLY the JSON object, no markdown fences.`,
             }],
             {
                 systemPrompt: 'You are a process designer for the Feral CCF engine. Generate a valid process JSON that solves the user\'s request using the provided catalog nodes. The process will be executed immediately by the Feral engine. Be precise with catalog_node_key values — they must match exactly.',
                 temperature: 0.3,
+                maxTokens: 32768,
             },
         );
 
@@ -337,12 +441,15 @@ Return ONLY the JSON object, no markdown fences.`,
 
         let processDesign: { reasoning: string; process: Record<string, unknown> };
         try {
-            processDesign = JSON.parse(cleanJson(step2Response));
-        } catch {
-            throw new Error('Failed to parse process design from LLM');
+            processDesign = parseJsonResponse(step2Response) as { reasoning: string; process: Record<string, unknown> };
+        } catch (err) {
+            debug('chat', `Step 2 raw response: ${step2Response}`);
+            throw new Error(`Failed to parse process design from LLM: ${err instanceof Error ? err.message : err}`);
         }
 
         allReasonings.push(processDesign.reasoning);
+
+        await logger.log('process_design', { iteration: iteration + 1, reasoning: processDesign.reasoning, process: processDesign.process });
 
         // Emit process JSON for visualization
         onProcess?.(processDesign.process);
@@ -382,6 +489,8 @@ Return ONLY the JSON object, no markdown fences.`,
 
         allResults.push(scrubSecrets(iterationResult) as Record<string, unknown>);
 
+        await logger.log('process_result', { iteration: iteration + 1, results: iterationResult });
+
         // ── STEP 4: Check completion ──────────────────────────────────
         if (iteration < MAX_ITERATIONS - 1) {
             status('Checking if task is complete…');
@@ -419,11 +528,13 @@ Return ONLY the JSON object, no markdown fences.`,
 
             let completion: { status: string; remaining?: string };
             try {
-                completion = JSON.parse(cleanJson(completionResponse));
+                completion = parseJsonResponse(completionResponse) as { status: string; remaining?: string };
             } catch {
                 debug('chat', 'Could not parse completion response, assuming complete');
                 break;
             }
+
+            await logger.log('completion_check', { iteration: iteration + 1, status: completion.status, remaining: completion.remaining || null });
 
             if (completion.status === 'complete') {
                 debug('chat', 'Task complete, exiting orchestration loop');
@@ -465,7 +576,9 @@ Now compose a helpful, natural response to the user. Be concise and friendly. If
         },
     );
 
-    return step5Response.trim();
+    const finalResponse = step5Response.trim();
+    await logger.log('response', { response: finalResponse });
+    return finalResponse;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -476,9 +589,13 @@ export async function feralChat(userInput: string): Promise<void> {
     const spinner = ora({ text: chalk.dim('Dobbi is thinking…'), color: 'cyan' }).start();
 
     try {
-        const response = await feralChatHeadless(userInput, (s) => {
-            spinner.text = chalk.dim(s);
-        });
+        const response = await feralChatHeadless(
+            userInput,
+            (s) => { spinner.text = chalk.dim(s); },
+            undefined,
+            undefined,
+            (chatId) => { spinner.text = chalk.dim(`[${chatId}] Dobbi is thinking…`); },
+        );
 
         spinner.stop();
         console.log(chalk.cyan(`\n  ${response.split('\n').join('\n  ')}\n`));
@@ -555,6 +672,75 @@ function cleanJson(raw: string): string {
     // Fix missing closing quotes: "key": "value\n  →  "key": "value"\n
     s = s.replace(/":\s*"([^"]*?)(\n)/g, '": "$1"$2');
     return s.trim();
+}
+
+/**
+ * Try multiple strategies to extract a JSON object from an LLM response.
+ * Returns parsed object or throws.
+ */
+function parseJsonResponse(raw: string): Record<string, unknown> {
+    // Strategy 1: clean and parse directly
+    const cleaned = cleanJson(raw);
+    try {
+        return JSON.parse(cleaned);
+    } catch {
+        // continue to fallback strategies
+    }
+
+    // Strategy 2: extract the outermost { ... } block (handles preamble/postamble text)
+    const firstBrace = cleaned.indexOf('{');
+    if (firstBrace >= 0) {
+        let depth = 0;
+        let inString = false;
+        let escape = false;
+        for (let i = firstBrace; i < cleaned.length; i++) {
+            const ch = cleaned[i];
+            if (escape) { escape = false; continue; }
+            if (ch === '\\' && inString) { escape = true; continue; }
+            if (ch === '"') { inString = !inString; continue; }
+            if (inString) continue;
+            if (ch === '{') depth++;
+            if (ch === '}') {
+                depth--;
+                if (depth === 0) {
+                    try {
+                        return JSON.parse(cleaned.slice(firstBrace, i + 1));
+                    } catch {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Strategy 3: try to fix truncated JSON by closing open braces/brackets
+    try {
+        let fixed = cleaned;
+        // Count unclosed braces and brackets
+        let braces = 0, brackets = 0;
+        let inStr = false, esc = false;
+        for (const ch of fixed) {
+            if (esc) { esc = false; continue; }
+            if (ch === '\\' && inStr) { esc = true; continue; }
+            if (ch === '"') { inStr = !inStr; continue; }
+            if (inStr) continue;
+            if (ch === '{') braces++;
+            if (ch === '}') braces--;
+            if (ch === '[') brackets++;
+            if (ch === ']') brackets--;
+        }
+        // Remove any trailing partial key/value (after last comma or opening brace)
+        fixed = fixed.replace(/,\s*"[^"]*"?\s*:?\s*"?[^"]*$/, '');
+        fixed = fixed.replace(/,\s*$/, '');
+        // Close open brackets and braces
+        for (let i = 0; i < brackets; i++) fixed += ']';
+        for (let i = 0; i < braces; i++) fixed += '}';
+        return JSON.parse(fixed);
+    } catch {
+        // give up
+    }
+
+    throw new Error(`Invalid JSON: ${cleaned.slice(0, 200)}…`);
 }
 
 /**

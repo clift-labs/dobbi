@@ -1,9 +1,10 @@
 import { promises as fs } from 'fs';
 import { getResponse } from '../responses.js';
 import { debug } from '../utils/debug.js';
+import { findVaultRoot } from '../state/manager.js';
 import path from 'path';
 import os from 'os';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, execSync } from 'child_process';
 
 const DOBBI_DIR = path.join(os.homedir(), '.dobbi');
 const PID_FILE = path.join(DOBBI_DIR, 'dobbi.pid');
@@ -101,6 +102,24 @@ export async function startDaemon(): Promise<DaemonStatus> {
 
     await ensureDobbiDir();
 
+    // Kill any stale process holding port 3737
+    try {
+        const pids = execSync('lsof -ti :3737', { encoding: 'utf-8' }).trim();
+        if (pids) {
+            for (const pid of pids.split('\n')) {
+                try {
+                    process.kill(parseInt(pid, 10), 'SIGKILL');
+                } catch {
+                    // Process may have already exited
+                }
+            }
+            // Brief wait for port to free up
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
+    } catch {
+        // lsof returns non-zero when no process found — that's fine
+    }
+
     // Remove stale socket
     try {
         await fs.unlink(SOCKET_PATH);
@@ -115,10 +134,21 @@ export async function startDaemon(): Promise<DaemonStatus> {
 
     const logStream = await fs.open(LOG_FILE, 'a');
 
+    // Pass the vault root to the child so it can find the vault
+    // regardless of its working directory.
+    const vaultRoot = await findVaultRoot();
+    const childEnv: Record<string, string> = {
+        ...process.env as Record<string, string>,
+        DOBBI_SERVICE: '1',
+    };
+    if (vaultRoot) {
+        childEnv.DOBBI_VAULT = vaultRoot;
+    }
+
     const child = spawn('node', [entryScript], {
         detached: true,
         stdio: ['ignore', logStream.fd, logStream.fd],
-        env: { ...process.env, DOBBI_SERVICE: '1' },
+        env: childEnv,
     });
 
     child.unref();

@@ -13,6 +13,7 @@ import { listEntities, type EntityTypeName } from '../../../entities/entity.js';
 export class ListEntitiesNodeCode extends AbstractNodeCode {
     static readonly configDescriptions: ConfigurationDescription[] = [
         { key: 'entity_type', name: 'Entity Type', description: 'The entity type to list (any configured entity type, e.g. task, note, event, goal).', type: 'string' },
+        { key: 'tags', name: 'Tags', description: 'Comma-separated tag names to filter by (case-insensitive exact match). Only entities with at least one matching tag are returned.', type: 'string', isOptional: true },
         { key: 'context_path', name: 'Context Path', description: 'Context key to store the entity list.', type: 'string', default: 'entities' },
     ];
     static readonly resultDescriptions: ResultDescription[] = [
@@ -28,8 +29,11 @@ export class ListEntitiesNodeCode extends AbstractNodeCode {
         const entityType = this.getRequiredConfigValue('entity_type') as EntityTypeName;
         const contextPath = this.getRequiredConfigValue('context_path', 'entities') as string;
 
+        const tagsRaw = this.getOptionalConfigValue('tags') as string | null;
+        const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : undefined;
+
         try {
-            const entities = await listEntities(entityType);
+            const entities = await listEntities(entityType, tags ? { tags } : undefined);
             const result = entities.map(e => ({
                 title: e.meta.title as string,
                 filepath: e.filepath,

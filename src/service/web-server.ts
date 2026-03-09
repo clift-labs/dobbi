@@ -198,6 +198,7 @@ export class WebServer {
         message: string,
         onQuestion?: (question: string, options?: string[]) => Promise<string>,
     ): Promise<void> {
+        let currentChatId: string | undefined;
         try {
             const response = await feralChatHeadless(
                 message,
@@ -212,10 +213,16 @@ export class WebServer {
                     }
                 },
                 onQuestion,
+                (chatId) => {
+                    currentChatId = chatId;
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'chat.start', chatId }));
+                    }
+                },
             );
 
             if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'chat.response', message: response }));
+                ws.send(JSON.stringify({ type: 'chat.response', message: response, chatId: currentChatId }));
             }
 
             // If the chat likely mutated entities, tell clients to refresh
@@ -228,7 +235,7 @@ export class WebServer {
             const error = err instanceof Error ? err.message : String(err);
             debug('web', `Chat error: ${error}`);
             if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'chat.error', error }));
+                ws.send(JSON.stringify({ type: 'chat.error', error, chatId: currentChatId }));
             }
         }
     }

@@ -78,6 +78,7 @@ import { SortEntitiesNodeCode } from './node-code/entity/sort-entities-node-code
 import { LoadVaultContextNodeCode } from './node-code/entity/load-vault-context-node-code.js';
 import { CreateRecurringTaskNodeCode } from './node-code/entity/create-recurring-task-node-code.js';
 import { SearchEntitiesNodeCode } from './node-code/entity/search-entities-node-code.js';
+import { LinkEntitiesNodeCode } from './node-code/entity/link-entities-node-code.js';
 
 // Catalog sources
 import { SlackCatalogSource } from './catalog/slack-catalog-source.js';
@@ -85,9 +86,11 @@ import { AgentCatalogSource } from './catalog/agent-catalog-source.js';
 import { EntityCatalogSource } from './catalog/entity-catalog-source.js';
 import { SystemCatalogSource } from './catalog/system-catalog-source.js';
 import { OutputCatalogSource } from './catalog/output-catalog-source.js';
+import { IntrospectCatalogSource } from './catalog/introspect-catalog-source.js';
 
 // System & output node codes
 import { CliCommandNodeCode } from './node-code/system/cli-command-node-code.js';
+import { IntrospectNodeCode } from './node-code/system/introspect-node-code.js';
 import { DobbiSpeakNodeCode } from './node-code/output/dobbi-speak-node-code.js';
 
 // Input node codes
@@ -159,8 +162,10 @@ function getBuiltInNodeCodes(): NodeCode[] {
         new LoadVaultContextNodeCode(),
         new CreateRecurringTaskNodeCode(),
         new SearchEntitiesNodeCode(),
+        new LinkEntitiesNodeCode(),
         // System & output
         new CliCommandNodeCode(),
+        new IntrospectNodeCode(),
         new DobbiSpeakNodeCode(),
         // Input
         new PromptInputNodeCode(),
@@ -211,6 +216,7 @@ export async function bootstrapFeral(
         new EntityCatalogSource(entityTypes),
         new SystemCatalogSource(),
         new OutputCatalogSource(),
+        new IntrospectCatalogSource(),
     ]);
 
     // 4. Load process definitions from ~/.dobbi/processes/

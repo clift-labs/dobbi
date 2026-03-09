@@ -19,6 +19,9 @@ export const DEFAULT_ENTITY_TYPES: EntityTypeConfig[] = [
             { key: 'priority', type: 'enum',   label: 'Priority',
               values: ['low', 'medium', 'high', 'critical'],       default: 'medium', required: true },
             { key: 'dueDate',  type: 'date',   label: 'Due Date',  required: false },
+            { key: 'focusTime',    type: 'string', label: 'Focus Time',    required: false },
+            { key: 'calendarDays', type: 'number', label: 'Calendar Days', required: false },
+            { key: 'startDate',    type: 'date',   label: 'Start Date',    required: false },
         ],
         completionField: 'status',
         completionValue: 'done',
@@ -31,7 +34,29 @@ export const DEFAULT_ENTITY_TYPES: EntityTypeConfig[] = [
         defaultTags: ['note'],
         fields: [],
     },
+    {
+        name: 'event',
+        plural: 'events',
+        directory: 'events',
+        description: 'Calendar events and appointments',
+        defaultTags: ['event'],
+        fields: [
+            { key: 'date',     type: 'date',     label: 'Date',      required: true },
+            { key: 'time',     type: 'string',   label: 'Time',      required: false },
+            { key: 'location', type: 'string',   label: 'Location',  required: false },
+        ],
+    },
+    {
+        name: 'todont',
+        plural: 'todonts',
+        directory: 'todonts',
+        description: 'Things to deliberately NOT do',
+        defaultTags: ['todont'],
+        fields: [
+            { key: 'reason', type: 'string', label: 'Reason', required: false },
+        ],
+    },
 ];
 
 /** Names of built-in types that cannot be removed. */
-export const BUILT_IN_TYPE_NAMES = new Set(['task', 'note']);
+export const BUILT_IN_TYPE_NAMES = new Set(['task', 'note', 'event', 'todont']);

@@ -1,17 +1,29 @@
 import { Command } from 'commander';
-import { getResponse, refreshResponseCache } from '../responses.js';
 import { debug } from '../utils/debug.js';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { findVaultRoot, saveState, loadState } from '../state/manager.js';
+import os from 'os';
+import { findVaultRoot } from '../state/manager.js';
 import { initEntityTypes } from '../entities/entity-type-config.js';
+import { setApiKey, PROVIDER_MODELS, getConfiguredProviders } from '../config.js';
+import { startDaemon } from '../service/daemon.js';
+
+const CUPBOARD_DIR = path.join(os.homedir(), '.dobbi');
 
 export const initCommand = new Command('init')
     .description('Initialize a new dobbi vault in the current directory')
     .action(async () => {
         const cwd = process.cwd();
+
+        // Reject init inside the system cupboard
+        if (cwd === path.join(os.homedir(), '.dobbi')) {
+            console.log(chalk.red('~/.dobbi/ is reserved for Dobbi\'s system config, sir.'));
+            console.log(chalk.gray('Please run `dobbi init` from a different directory.'));
+            return;
+        }
+
         const socksPath = path.join(cwd, '.socks.md');
 
         // Check if already a vault
@@ -32,8 +44,7 @@ export const initCommand = new Command('init')
             await fs.access(socksPath);
             console.log(chalk.yellow('.socks.md already exists. This is already a vault.'));
             return;
-        } catch (err) {
-            debug('init', err);
+        } catch {
             // Good, doesn't exist
         }
 
@@ -71,6 +82,9 @@ Dobbi is a helpful, polite English house-elf. He is:
 - Date format: YYYY-MM-DD
 `;
         await fs.writeFile(socksPath, rootSocks);
+
+        // Ensure ~/.dobbi/ cupboard exists for config & secrets
+        await fs.mkdir(CUPBOARD_DIR, { recursive: true });
 
         // Seed entity-types.json in ~/.dobbi/
         await initEntityTypes();
@@ -132,48 +146,59 @@ Time-blocked events and appointments.
         try {
             await fs.access(path.join(cwd, '.gitignore'));
             await fs.appendFile(path.join(cwd, '.gitignore'), '\n' + gitignore);
-        } catch (err) {
-            debug('init', err);
+        } catch {
             await fs.writeFile(path.join(cwd, '.gitignore'), gitignore);
         }
 
-        // ── User setup ─────────────────────────────────────────────────
-        console.log(chalk.green('\n✓ Vault structure created!'));
-        console.log(chalk.cyan('\n🤖 Dobbi would like to get to know you...\n'));
+        console.log(chalk.green('\n✓ Vault created!'));
 
-        const { userName, gender } = await inquirer.prompt([
-            {
-                type: 'input',
-                name: 'userName',
-                message: 'What should Dobbi call you?',
-                default: process.env.USER || 'friend',
-            },
-            {
+        // ── Cupboard setup (only on first-ever init) ────────────────────
+        const configured = await getConfiguredProviders();
+        if (configured.length === 0) {
+            console.log(chalk.cyan('\n🔑 Dobbi needs an API key to think, sir.\n'));
+
+            const knownProviders = Object.keys(PROVIDER_MODELS);
+            const { provider } = await inquirer.prompt([{
                 type: 'list',
-                name: 'gender',
-                message: 'How does Dobbi see you?',
-                choices: [
-                    { name: 'Male', value: 'male' },
-                    { name: 'Female', value: 'female' },
-                    { name: 'Other', value: 'other' },
-                ],
-            },
-        ]);
+                name: 'provider',
+                message: 'Which AI provider?',
+                choices: knownProviders.map(p => ({ name: p, value: p })),
+                default: 'openai',
+            }]);
 
-        const state = await loadState();
-        state.userName = userName;
-        state.gender = gender as 'male' | 'female' | 'other';
-        await saveState(state);
+            const { apiKey } = await inquirer.prompt([{
+                type: 'password',
+                name: 'apiKey',
+                message: `Enter ${provider} API key:`,
+                mask: '*',
+                validate: (input: string) => input.length > 0 || 'API key is required',
+            }]);
 
-        // Refresh the response cache so the greeting uses the new name
-        await refreshResponseCache();
+            await setApiKey(provider, apiKey);
+            console.log(chalk.green(`\n✓ ${provider} API key saved to ~/.dobbi/`));
 
-        console.log(chalk.gray(`\nCreated:`));
+            // Start service on first setup
+            console.log(chalk.gray('\nStarting Dobbi service...'));
+            try {
+                const status = await startDaemon();
+                if (status.running) {
+                    console.log(chalk.green('✓ Service running!'));
+                    console.log(chalk.cyan('  Web client: http://localhost:3737\n'));
+                } else {
+                    console.log(chalk.yellow('Service did not start. Run `dobbi service start` to try again.\n'));
+                }
+            } catch (err) {
+                debug('init', err);
+                console.log(chalk.yellow('Could not auto-start service. Run `dobbi service start` manually.\n'));
+            }
+        }
+
+        console.log(chalk.gray(`Created:`));
         console.log(chalk.gray(`  .socks.md           - Root context`));
         console.log(chalk.gray(`  projects/           - Your projects`));
         console.log(chalk.gray(`  global/todos/       - Cross-project todos`));
         console.log(chalk.gray(`  global/schedule/    - Calendar/schedule`));
-        console.log(chalk.cyan(`\n${getResponse('greeting')}`));
+        console.log(chalk.cyan('\nRun `dobbi` to meet Dobbi and get started!'));
     });
 
 export default initCommand;

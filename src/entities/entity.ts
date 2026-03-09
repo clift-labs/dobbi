@@ -82,6 +82,9 @@ export interface TaskEntity extends EntityMeta {
     status: TaskStatus;
     priority: TaskPriority;
     dueDate?: string;          // YYYY-MM-DD
+    focusTime?: string;        // hours of actual work, e.g. "4h", "30m", "2d"
+    calendarDays?: number;     // elapsed days the work spans
+    startDate?: string;        // YYYY-MM-DD — when work begins
 }
 
 /** Event — has start and end datetimes */
@@ -345,9 +348,26 @@ export async function findEntityByTitle(
 export async function searchEntities(
     query: string,
     entityType?: EntityTypeName,
+    options?: { tags?: string[] },
 ): Promise<{ filepath: string; meta: Record<string, unknown>; content: string; score: number }[]> {
-    const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
-    if (tokens.length === 0) return [];
+    const rawTokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+
+    // Separate tag:value tokens from regular search tokens
+    const tagTokens: string[] = [];
+    const searchTokens: string[] = [];
+    for (const token of rawTokens) {
+        if (token.startsWith('tag:') || token.startsWith('tags:')) {
+            const tagValue = token.slice(token.indexOf(':') + 1);
+            if (tagValue) tagTokens.push(tagValue);
+        } else {
+            searchTokens.push(token);
+        }
+    }
+
+    // Merge inline tag: tokens with explicit tags option
+    const allFilterTags = [...tagTokens, ...(options?.tags ?? []).map(t => t.toLowerCase())];
+
+    if (searchTokens.length === 0 && allFilterTags.length === 0) return [];
 
     // Gather all entities to search
     let allEntities: { filepath: string; meta: Record<string, unknown>; content: string }[];
@@ -360,6 +380,19 @@ export async function searchEntities(
         allEntities = lists.flat();
     }
 
+    // Pre-filter by tags if any tag filters are specified
+    if (allFilterTags.length > 0) {
+        allEntities = allEntities.filter(e => {
+            const entityTags = ((e.meta.tags as string[]) ?? []).map(t => t.toLowerCase());
+            return allFilterTags.some(ft => entityTags.includes(ft));
+        });
+    }
+
+    // If no search tokens, return all tag-matched entities with score 1
+    if (searchTokens.length === 0) {
+        return allEntities.map(e => ({ filepath: e.filepath, meta: e.meta, content: e.content, score: 1 }));
+    }
+
     const results: { filepath: string; meta: Record<string, unknown>; content: string; score: number }[] = [];
 
     for (const entity of allEntities) {
@@ -370,7 +403,7 @@ export async function searchEntities(
         let score = 0;
         let allMatched = true;
 
-        for (const token of tokens) {
+        for (const token of searchTokens) {
             let matched = false;
             if (title.includes(token)) { score += 3; matched = true; }
             if (tags.some(tag => tag.includes(token))) { score += 2; matched = true; }
@@ -392,6 +425,7 @@ export async function searchEntities(
  */
 export async function listEntities(
     entityType: EntityTypeName,
+    options?: { tags?: string[] },
 ): Promise<{ filepath: string; meta: Record<string, unknown>; content: string }[]> {
     let dir: string;
     try {
@@ -418,6 +452,15 @@ export async function listEntities(
     } catch (err) {
         debug('entities', err);
         // Directory doesn't exist
+    }
+
+    // Filter by tags if requested (case-insensitive exact match)
+    if (options?.tags && options.tags.length > 0) {
+        const filterTags = options.tags.map(t => t.toLowerCase());
+        return entities.filter(e => {
+            const entityTags = ((e.meta.tags as string[]) ?? []).map(t => t.toLowerCase());
+            return filterTags.some(ft => entityTags.includes(ft));
+        });
     }
 
     return entities;

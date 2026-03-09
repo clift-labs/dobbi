@@ -395,6 +395,13 @@
     background: rgba(255, 82, 82, 0.05);
   }
 
+  .chat-id-label {
+    font-size: 9px;
+    color: var(--dim);
+    margin-top: 4px;
+    letter-spacing: 0.5px;
+  }
+
   .chat-msg.question .chat-bubble {
     background: rgba(0, 212, 255, 0.08);
     border: 1px solid rgba(0, 212, 255, 0.25);
@@ -627,6 +634,7 @@
 
   let ws = null;
   let thinkingEl = null;
+  let currentChatId = null;
 
   // ── Data fetching ──────────────────────────────────────────
 
@@ -812,6 +820,9 @@
 
       try {
         switch (msg.type) {
+          case 'chat.start':
+            currentChatId = msg.chatId || null;
+            break;
           case 'chat.thinking':
             showThinking(msg.status);
             break;
@@ -825,12 +836,15 @@
             break;
           case 'chat.response':
             clearThinking();
-            addMessage('bot', msg.message);
+            if (msg.chatId) currentChatId = msg.chatId;
+            addMessage('bot', msg.message, currentChatId);
+            currentChatId = null;
             unlockChat();
             break;
           case 'chat.error':
             clearThinking();
             addMessage('error', msg.error);
+            currentChatId = null;
             unlockChat();
             break;
           case 'refresh':
@@ -861,7 +875,7 @@
     chatInput.disabled = true;
   });
 
-  function addMessage(role, text) {
+  function addMessage(role, text, chatId) {
     const div = document.createElement('div');
     div.className = 'chat-msg ' + role;
     const bubble = document.createElement('div');
@@ -872,6 +886,12 @@
       bubble.textContent = text || '';
     }
     div.appendChild(bubble);
+    if (chatId && role === 'bot') {
+      const idLabel = document.createElement('div');
+      idLabel.className = 'chat-id-label';
+      idLabel.textContent = chatId;
+      div.appendChild(idLabel);
+    }
     chatMessages.appendChild(div);
     chatMessages.scrollTop = chatMessages.scrollHeight;
   }

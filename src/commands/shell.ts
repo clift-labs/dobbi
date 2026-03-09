@@ -7,7 +7,7 @@ import { getResponse } from '../responses.js';
 import { StatusBar } from '../shell/tui.js';
 import { StatusPoller } from '../shell/status-poller.js';
 import { breadcrumbPrompt } from '../ui/breadcrumb.js';
-import { isInterviewComplete } from '../state/manager.js';
+import { isInterviewComplete, isInVault } from '../state/manager.js';
 import { runInterview } from './interview.js';
 import { getEntityIndex } from '../entities/entity-index.js';
 import type { EntityTypeName } from '../entities/entity.js';
@@ -208,6 +208,14 @@ export function createShellCommand(_program: Command): Command {
         .alias('sh')
         .description('Start interactive shell mode with tab-completion')
         .action(async () => {
+            // Guard: vault must exist
+            if (!(await isInVault())) {
+                console.log(chalk.red('\n🤖 Dobbi cannot find a vault here, sir.'));
+                console.log(chalk.gray('No .socks.md found in this directory or any parent.'));
+                console.log(chalk.gray('\nTo create a vault, run: dobbi init\n'));
+                return;
+            }
+
             const bar = new StatusBar();
             const poller = new StatusPoller(bar);
 

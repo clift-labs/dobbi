@@ -23,6 +23,7 @@ export function resetVaultCache(): void {
 
 /**
  * Finds the vault root by looking for .socks.md in cwd or parent directories.
+ * Also checks the DOBBI_VAULT env var (set by the daemon on startup).
  * Returns null if no vault is found.
  */
 export async function findVaultRoot(): Promise<string | null> {
@@ -30,9 +31,28 @@ export async function findVaultRoot(): Promise<string | null> {
         return cachedVaultRoot;
     }
 
+    // If DOBBI_VAULT is set (e.g. by the daemon), trust it directly
+    const envVault = process.env.DOBBI_VAULT;
+    if (envVault) {
+        const socksPath = path.join(envVault, SOCKS_FILE);
+        try {
+            await fs.access(socksPath);
+            cachedVaultRoot = envVault;
+            return envVault;
+        } catch {
+            // Env var points to invalid vault, fall through to cwd scan
+        }
+    }
+
+    const systemCupboard = path.join(os.homedir(), '.dobbi');
     let currentDir = process.cwd();
 
     while (currentDir !== path.dirname(currentDir)) {
+        // Never treat the system cupboard (~/.dobbi/) as a vault
+        if (currentDir === systemCupboard) {
+            currentDir = path.dirname(currentDir);
+            continue;
+        }
         const socksPath = path.join(currentDir, SOCKS_FILE);
         try {
             await fs.access(socksPath);
@@ -55,8 +75,8 @@ export async function getVaultRoot(): Promise<string> {
 
     if (!root) {
         console.error(chalk.red('\n🤖 Dobbi cannot find a vault here, sir.'));
-        console.error(chalk.gray('This directory does not contain a .socks.md file.'));
-        console.error(chalk.gray('\nTo create a new vault, run: dobbi init'));
+        console.error(chalk.gray('No .socks.md found in this directory or any parent.'));
+        console.error(chalk.gray('\nTo create a vault, run: dobbi init'));
         throw new Error('No vault found in current directory tree');
     }
 

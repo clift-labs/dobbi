@@ -8,7 +8,7 @@ import chalk from 'chalk';
 import inquirer from 'inquirer';
 import path from 'path';
 import { promises as fs } from 'fs';
-import { requireProject } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 import {
     generateEntityId,
     ensureEntityDir,
@@ -24,7 +24,6 @@ import { getResponse } from '../responses.js';
 interface TodontState {
     title: string;
     content: string;
-    project: string;
     startDate?: string;    // YYYY-MM-DD or undefined = always
     endDate?: string;      // YYYY-MM-DD or undefined = always
 }
@@ -46,7 +45,6 @@ async function saveTodont(state: TodontState): Promise<string> {
         `title: "${state.title}"`,
         `entityType: todont`,
         `created: ${today}`,
-        `project: ${state.project}`,
     ];
     if (state.startDate) lines.push(`startDate: ${state.startDate}`);
     if (state.endDate) lines.push(`endDate: ${state.endDate}`);
@@ -184,8 +182,6 @@ export const todontCommand = new Command('todont')
             }
 
             // Create flow
-            const project = await requireProject();
-
             let title = words.length > 0 ? words[0] : undefined;
 
             if (!title) {
@@ -241,7 +237,6 @@ export const todontCommand = new Command('todont')
             const state: TodontState = {
                 title: title!,
                 content: description || '',
-                project,
                 startDate,
                 endDate,
             };

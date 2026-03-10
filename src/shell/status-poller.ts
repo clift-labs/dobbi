@@ -1,14 +1,12 @@
 /**
  * Background status poller for the Dobbi shell.
  *
- * Polls service status, queue size, and active project on a timer
+ * Polls service status and queue size on a timer
  * and updates the StatusBar data.
  */
 
 import { getDaemonStatus } from '../service/daemon.js';
 import { getServiceClient } from '../client/index.js';
-import { findVaultRoot } from '../state/manager.js';
-import { getActiveProject } from '../state/manager.js';
 import type { StatusBar, ShellStatus } from './tui.js';
 
 const POLL_INTERVAL_MS = 5000;
@@ -81,18 +79,6 @@ export class StatusPoller {
             status.queueSize = 0;
             status.memoryMB = 0;
             status.entityCount = 0;
-        }
-
-        // Active project
-        try {
-            const vault = await findVaultRoot();
-            if (vault) {
-                status.project = await getActiveProject();
-            } else {
-                status.project = null;
-            }
-        } catch {
-            status.project = null;
         }
 
         // Update the status bar data (doesn't print — that happens before each prompt)

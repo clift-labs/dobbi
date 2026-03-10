@@ -6,7 +6,6 @@ import './time.js';
 import './summarize.js';
 
 // Import V2 service tools to register them
-import './project.js';
 import './notes.js';
 import './tasks.js';
 import './goals.js';

@@ -4,8 +4,6 @@ import os from 'os';
 import { StateSchema, type State } from '../schemas/index.js';
 import { getResponse } from '../responses.js';
 import { debug } from '../utils/debug.js';
-import { DEFAULT_ENTITY_TYPES } from '../entities/entity-types-defaults.js';
-import inquirer from 'inquirer';
 import chalk from 'chalk';
 
 const SOCKS_FILE = '.socks.md';
@@ -95,7 +93,6 @@ function getStatePath(vaultRoot: string): string {
 }
 
 const DEFAULT_STATE: State = {
-    activeProject: null,
     lastUsed: undefined,
 };
 
@@ -113,17 +110,6 @@ export async function saveState(state: State): Promise<void> {
     const vaultRoot = await getVaultRoot();
     state.lastUsed = new Date().toISOString().split('T')[0];
     await fs.writeFile(getStatePath(vaultRoot), JSON.stringify(state, null, 2));
-}
-
-export async function getActiveProject(): Promise<string | null> {
-    const state = await loadState();
-    return state.activeProject;
-}
-
-export async function setActiveProject(projectName: string): Promise<void> {
-    const state = await loadState();
-    state.activeProject = projectName;
-    await saveState(state);
 }
 
 /**
@@ -202,7 +188,6 @@ export async function saveProfile(profile: {
     cityWork?: string;
     personalCalUrl?: string;
     workCalUrl?: string;
-    firstProject?: string;
 }): Promise<void> {
     const state = await loadState();
     state.userName = profile.userName;
@@ -215,136 +200,8 @@ export async function saveProfile(profile: {
     state.cityWork = profile.cityWork;
     state.personalCalUrl = profile.personalCalUrl;
     state.workCalUrl = profile.workCalUrl;
-    state.firstProject = profile.firstProject;
     state.interviewComplete = true;
     await saveState(state);
-}
-
-export async function clearActiveProject(): Promise<void> {
-    const state = await loadState();
-    state.activeProject = null;
-    await saveState(state);
-}
-
-export async function requireProject(): Promise<string> {
-    const activeProject = await getActiveProject();
-
-    if (activeProject) {
-        return activeProject;
-    }
-
-    // Prompt the user for a project
-    console.log(chalk.yellow("\nDobbi needs to know which project, sir."));
-
-    const projects = await listProjects();
-
-    if (projects.length === 0) {
-        console.log(chalk.gray("No projects exist yet. Dobbi will create one for you, sir."));
-        const { projectName } = await inquirer.prompt([
-            {
-                type: 'input',
-                name: 'projectName',
-                message: 'What shall Dobbi call this project, sir?',
-                validate: (input: string) => input.length > 0 || 'Please enter a project name',
-            },
-        ]);
-        await createProject(projectName);
-        await setActiveProject(projectName);
-        return projectName;
-    }
-
-    const { selectedProject } = await inquirer.prompt([
-        {
-            type: 'list',
-            name: 'selectedProject',
-            message: 'What project, sir?',
-            choices: projects,
-        },
-    ]);
-
-    await setActiveProject(selectedProject);
-    return selectedProject;
-}
-
-export async function listProjects(): Promise<string[]> {
-    const vaultRoot = await getVaultRoot();
-    const projectsDir = path.join(vaultRoot, 'projects');
-
-    try {
-        const entries = await fs.readdir(projectsDir, { withFileTypes: true });
-        return entries
-            .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
-            .map(entry => entry.name);
-    } catch (err) {
-        debug('state', err);
-        return [];
-    }
-}
-
-export async function createProject(name: string): Promise<void> {
-    const vaultRoot = await getVaultRoot();
-    const projectDir = path.join(vaultRoot, 'projects', name);
-    const today = new Date().toISOString().split('T')[0];
-
-    // New projects start with only the two built-in entity types (task + note).
-    // Users can add more types later via `dobbi type add`.
-    const folders = DEFAULT_ENTITY_TYPES.map(t => t.directory);
-    // Always include inbox (not an entity type but used for quick capture)
-    if (!folders.includes('inbox')) folders.push('inbox');
-
-    // Create all entity directories
-    for (const folder of folders) {
-        await fs.mkdir(path.join(projectDir, folder), { recursive: true });
-    }
-
-    // Create project .socks.md
-    const socksContent = `---
-title: "${name} Context"
-created: ${today}
-tags: [context, project]
----
-
-# ${name}
-
-Project-specific context and notes.
-
-## Goals
-
--
-
-## Notes
-
--
-`;
-
-    await fs.writeFile(path.join(projectDir, '.socks.md'), socksContent);
-
-    // Create sub-folder .socks.md files
-    for (const folder of folders) {
-        const label = folder.charAt(0).toUpperCase() + folder.slice(1);
-        const folderSocks = `---
-title: "${name} ${label} Context"
-created: ${today}
-tags: [context, ${folder}]
----
-
-# ${name} - ${label}
-
-`;
-        await fs.writeFile(path.join(projectDir, folder, '.socks.md'), folderSocks);
-    }
-}
-
-export async function projectExists(name: string): Promise<boolean> {
-    const vaultRoot = await getVaultRoot();
-    const projectDir = path.join(vaultRoot, 'projects', name);
-    try {
-        const stat = await fs.stat(projectDir);
-        return stat.isDirectory();
-    } catch (err) {
-        debug('state', err);
-        return false;
-    }
 }
 
 /**

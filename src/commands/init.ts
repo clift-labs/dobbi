@@ -6,7 +6,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import { findVaultRoot } from '../state/manager.js';
-import { initEntityTypes } from '../entities/entity-type-config.js';
+import { initEntityTypes, loadEntityTypes } from '../entities/entity-type-config.js';
 import { setApiKey, PROVIDER_MODELS, getConfiguredProviders } from '../config.js';
 import { startDaemon } from '../service/daemon.js';
 
@@ -74,7 +74,6 @@ Dobbi is a helpful, polite English house-elf. He is:
 
 - All markdown files use YAML frontmatter
 - Context is read from deepest folder up to root
-- Projects are first-class citizens
 
 ## User Preferences
 
@@ -89,55 +88,15 @@ Dobbi is a helpful, polite English house-elf. He is:
         // Seed entity-types.json in ~/.dobbi/
         await initEntityTypes();
 
-        // Create projects folder
-        await fs.mkdir(path.join(cwd, 'projects'), { recursive: true });
-        await fs.writeFile(path.join(cwd, 'projects', '.socks.md'), `---
-title: "Projects Context"
-created: ${today}
-tags: [context, projects]
----
+        // Create entity type directories directly in vault root
+        const entityTypes = await loadEntityTypes();
+        const folders = entityTypes.map(t => t.directory);
+        // Always include inbox (not an entity type but used for quick capture)
+        if (!folders.includes('inbox')) folders.push('inbox');
 
-# Projects
-
-Each project has its own folder with todos, notes, and research.
-`);
-
-        // Create global folder with todos and schedule
-        await fs.mkdir(path.join(cwd, 'global', 'todos'), { recursive: true });
-        await fs.mkdir(path.join(cwd, 'global', 'schedule'), { recursive: true });
-
-        await fs.writeFile(path.join(cwd, 'global', '.socks.md'), `---
-title: "Global Context"
-created: ${today}
-tags: [context, global]
----
-
-# Global
-
-Cross-project items that apply everywhere.
-`);
-
-        await fs.writeFile(path.join(cwd, 'global', 'todos', '.socks.md'), `---
-title: "Global Todos Context"
-created: ${today}
-tags: [context, todos, global]
----
-
-# Global Todos
-
-Tasks that cut across all projects.
-`);
-
-        await fs.writeFile(path.join(cwd, 'global', 'schedule', '.socks.md'), `---
-title: "Schedule Context"
-created: ${today}
-tags: [context, schedule, global]
----
-
-# Schedule
-
-Time-blocked events and appointments.
-`);
+        for (const folder of folders) {
+            await fs.mkdir(path.join(cwd, folder), { recursive: true });
+        }
 
         // Create .gitignore
         const gitignore = `.state.json
@@ -195,9 +154,9 @@ Time-blocked events and appointments.
 
         console.log(chalk.gray(`Created:`));
         console.log(chalk.gray(`  .socks.md           - Root context`));
-        console.log(chalk.gray(`  projects/           - Your projects`));
-        console.log(chalk.gray(`  global/todos/       - Cross-project todos`));
-        console.log(chalk.gray(`  global/schedule/    - Calendar/schedule`));
+        for (const folder of folders) {
+            console.log(chalk.gray(`  ${folder}/`));
+        }
         console.log(chalk.cyan('\nRun `dobbi` to meet Dobbi and get started!'));
     });
 

@@ -4,7 +4,7 @@ import inquirer from 'inquirer';
 import { promises as fs } from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
-import { requireProject, getVaultRoot } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 import { getEnrichedContext } from '../context/reader.js';
 import { getModelForCapability, createDobbiSystemPrompt } from '../llm/router.js';
 import { getResponse } from '../responses.js';
@@ -18,7 +18,6 @@ import { findEntityByTitle, trashEntity, generateEntityId } from '../entities/en
 interface EventState {
     title: string;
     description: string;
-    project: string;
     startTime: string;  // ISO datetime
     endTime: string;    // ISO datetime
     location?: string;
@@ -46,14 +45,12 @@ function parseDateTime(input: string): string | null {
     return null;
 }
 
-async function findExistingEvent(project: string, titleOrFilename: string): Promise<EventState | null> {
+async function findExistingEvent(titleOrFilename: string): Promise<EventState | null> {
     const found = await findEntityByTitle('event', titleOrFilename);
     if (!found) return null;
-    if (found.meta.project && found.meta.project !== project) return null;
     return {
         title: found.meta.title as string,
         description: found.content,
-        project,
         startTime: (found.meta.startTime || found.meta.startDate || '') as string,
         endTime: (found.meta.endTime || found.meta.endDate || '') as string,
         location: found.meta.location as string | undefined,
@@ -65,7 +62,7 @@ async function findExistingEvent(project: string, titleOrFilename: string): Prom
 async function clarifyEvent(state: EventState): Promise<string> {
     console.log(chalk.gray('\nDobbi is clarifying the event, sir...'));
 
-    const context = await getEnrichedContext(state.project, 'events', state.description);
+    const context = await getEnrichedContext('events', state.description);
     const llm = await getModelForCapability('reason');
     const systemPrompt = createDobbiSystemPrompt(context);
 
@@ -93,7 +90,7 @@ ${state.description || '(No description yet)'}`,
 async function suggestTime(state: EventState): Promise<void> {
     console.log(chalk.gray('\nDobbi is analyzing timing, sir...'));
 
-    const context = await getEnrichedContext(state.project, 'events', state.description);
+    const context = await getEnrichedContext('events', state.description);
     const llm = await getModelForCapability('reason');
     const systemPrompt = createDobbiSystemPrompt(context);
 
@@ -124,7 +121,7 @@ ${state.description || '(No description)'}`,
 async function modifyEvent(state: EventState, feedback: string): Promise<string> {
     console.log(chalk.gray('\nDobbi is modifying the event, sir...'));
 
-    const context = await getEnrichedContext(state.project, 'events', state.description);
+    const context = await getEnrichedContext('events', state.description);
     const llm = await getModelForCapability('reason');
     const systemPrompt = createDobbiSystemPrompt(context);
 
@@ -150,7 +147,7 @@ User Feedback: ${feedback}`,
 
 async function saveEvent(state: EventState): Promise<string> {
     const vaultRoot = await getVaultRoot();
-    const eventsDir = path.join(vaultRoot, 'projects', state.project, 'events');
+    const eventsDir = path.join(vaultRoot, 'events');
 
     await fs.mkdir(eventsDir, { recursive: true });
 
@@ -166,7 +163,6 @@ title: "${state.title}"
 startTime: ${state.startTime}
 endTime: ${state.endTime}
 ${state.location ? `location: "${state.location}"` : ''}
-project: ${state.project}
 tags: [event]
 ---
 
@@ -271,8 +267,6 @@ export const eventCommand = new Command('event')
                 return;
             }
 
-            const project = await requireProject();
-
             // Parse: first word = title, rest = inline description
             let title = words.length > 0 ? words[0] : undefined;
             const inlineBody = words.length > 1 ? words.slice(1).join(' ') : undefined;
@@ -289,7 +283,7 @@ export const eventCommand = new Command('event')
                 title = eventTitle;
             }
 
-            const existing = await findExistingEvent(project, title!);
+            const existing = await findExistingEvent(title!);
 
             let state: EventState;
 
@@ -315,7 +309,6 @@ export const eventCommand = new Command('event')
                 state = {
                     title: title!,
                     description: inlineBody,
-                    project,
                     startTime: '',
                     endTime: '',
                     location: undefined,
@@ -350,14 +343,13 @@ export const eventCommand = new Command('event')
                 state = {
                     title: title!,
                     description: description.trim(),
-                    project,
                     startTime,
                     endTime,
                     location: location || undefined,
                     isExisting: false,
                 };
 
-                console.log(chalk.green(`\n✓ Event created for project "${project}"`));
+                console.log(chalk.green(`\n✓ Event created`));
             }
 
             pushCrumb('event');

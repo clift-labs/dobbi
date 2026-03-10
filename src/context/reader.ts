@@ -66,43 +66,37 @@ export async function getContextString(targetPath: string): Promise<string> {
 }
 
 /**
- * Gets the context for the current active project.
+ * Gets the context for the vault root.
  */
-export async function getProjectContext(projectName: string): Promise<string> {
+export async function getVaultContext(): Promise<string> {
     const vaultRoot = await getVaultRoot();
-    const projectPath = path.join(vaultRoot, 'projects', projectName);
-    return getContextString(projectPath);
+    return getContextString(vaultRoot);
 }
 
 /**
- * Gets the context for notes in a project.
+ * Gets the context for notes in the vault.
  * Convenience wrapper for getSubdirectoryContext.
  */
-export async function getNotesContext(projectName: string): Promise<string> {
-    return getSubdirectoryContext(projectName, 'notes');
+export async function getNotesContext(): Promise<string> {
+    return getSubdirectoryContext('notes');
 }
 
 /**
- * Gets context for a specific subdirectory within a project.
+ * Gets context for a specific subdirectory within the vault.
  * Gathers .socks.md files in this order (broadest to most specific):
- * 1. .socks.md (root)
- * 2. projects/.socks.md
- * 3. projects/{project}/.socks.md
- * 4. projects/{project}/{subdirectory}/.socks.md
+ * 1. .socks.md (vault root)
+ * 2. {subdirectory}/.socks.md
  *
- * @param projectName - The project name
- * @param subdirectory - The subdirectory within the project (e.g., 'notes', 'research', 'todos')
+ * @param subdirectory - The subdirectory within the vault (e.g., 'notes', 'research', 'todos')
  */
-export async function getSubdirectoryContext(projectName: string, subdirectory: string): Promise<string> {
+export async function getSubdirectoryContext(subdirectory: string): Promise<string> {
     const vaultRoot = await getVaultRoot();
     const contexts: string[] = [];
 
     // Define the hierarchy from root to subdirectory (broadest to most specific)
     const hierarchy = [
         vaultRoot,                                              // .socks.md
-        path.join(vaultRoot, 'projects'),                       // projects/.socks.md
-        path.join(vaultRoot, 'projects', projectName),          // projects/{project}/.socks.md
-        path.join(vaultRoot, 'projects', projectName, subdirectory) // projects/{project}/{subdirectory}/.socks.md
+        path.join(vaultRoot, subdirectory),                     // {subdirectory}/.socks.md
     ];
 
     for (const dirPath of hierarchy) {
@@ -116,35 +110,35 @@ export async function getSubdirectoryContext(projectName: string, subdirectory: 
 }
 
 /**
- * Gets the context for todos in a project.
+ * Gets the context for todos in the vault.
  * Convenience wrapper for getSubdirectoryContext.
  */
-export async function getTodosContext(projectName: string): Promise<string> {
-    return getSubdirectoryContext(projectName, 'todos');
+export async function getTodosContext(): Promise<string> {
+    return getSubdirectoryContext('todos');
 }
 
 /**
- * Gets the context for events in a project.
+ * Gets the context for events in the vault.
  * Convenience wrapper for getSubdirectoryContext.
  */
-export async function getEventsContext(projectName: string): Promise<string> {
-    return getSubdirectoryContext(projectName, 'events');
+export async function getEventsContext(): Promise<string> {
+    return getSubdirectoryContext('events');
 }
 
 /**
- * Gets the context for inbox in a project.
+ * Gets the context for inbox in the vault.
  * Convenience wrapper for getSubdirectoryContext.
  */
-export async function getInboxContext(projectName: string): Promise<string> {
-    return getSubdirectoryContext(projectName, 'inbox');
+export async function getInboxContext(): Promise<string> {
+    return getSubdirectoryContext('inbox');
 }
 
 /**
- * Gets the context for people in a project.
+ * Gets the context for people in the vault.
  * Convenience wrapper for getSubdirectoryContext.
  */
-export async function getPeopleContext(projectName: string): Promise<string> {
-    return getSubdirectoryContext(projectName, 'people');
+export async function getPeopleContext(): Promise<string> {
+    return getSubdirectoryContext('people');
 }
 
 /**
@@ -152,12 +146,11 @@ export async function getPeopleContext(projectName: string): Promise<string> {
  * @mentions and entity:slug cross-references found in the entity content.
  */
 export async function getEnrichedContext(
-    projectName: string,
     subdirectory: string,
     entityContent: string,
 ): Promise<string> {
     const { resolveReferences } = await import('./mentions.js');
-    const baseContext = await getSubdirectoryContext(projectName, subdirectory);
+    const baseContext = await getSubdirectoryContext(subdirectory);
     const refsContext = await resolveReferences(entityContent);
     return refsContext ? `${baseContext}\n\n---\n\n${refsContext}` : baseContext;
 }

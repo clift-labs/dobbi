@@ -1,6 +1,6 @@
 import type { Task, TaskContext, EntityType } from '../protocol.js';
-import { getSubdirectoryContext, getProjectContext, buildContextChain } from '../../context/reader.js';
-import { getVaultRoot, getActiveProject } from '../../state/manager.js';
+import { getSubdirectoryContext, getVaultContext, buildContextChain } from '../../context/reader.js';
+import { getVaultRoot } from '../../state/manager.js';
 
 /**
  * Full context containing all available context information.
@@ -24,7 +24,6 @@ export class ContextProvider {
 
     constructor(
         private vaultRoot: string,
-        private currentProject: string | null,
         private taskContext: TaskContext
     ) {
         this.initializeDefaultSymbols();
@@ -35,8 +34,7 @@ export class ContextProvider {
      */
     static async create(taskContext: TaskContext): Promise<ContextProvider> {
         const vaultRoot = await getVaultRoot();
-        const currentProject = await getActiveProject();
-        return new ContextProvider(vaultRoot, currentProject, taskContext);
+        return new ContextProvider(vaultRoot, taskContext);
     }
 
     /**
@@ -47,9 +45,6 @@ export class ContextProvider {
         this.symbols.set('current_date', now.toISOString().split('T')[0]);
         this.symbols.set('current_time', now.toISOString());
         this.symbols.set('vault_path', this.vaultRoot);
-        if (this.currentProject) {
-            this.symbols.set('project_name', this.currentProject);
-        }
     }
 
     /**
@@ -91,78 +86,49 @@ export class ContextProvider {
     }
 
     /**
-     * Get context for a specific project.
+     * Get vault context from vault root .socks.md.
      */
-    async getProjectContext(projectName?: string): Promise<string> {
-        const project = projectName ?? this.currentProject;
-        if (!project) {
-            return '';
-        }
-
-        return this.getCachedContext(`project:${project}`, async () => {
-            return getProjectContext(project);
-        });
-    }
-
-    /**
-     * Get the full context chain from root to project.
-     */
-    async getProjectContextChain(projectName?: string): Promise<string> {
-        const project = projectName ?? this.currentProject;
-        if (!project) {
-            return this.getGlobalContext();
-        }
-
-        return this.getCachedContext(`project-chain:${project}`, async () => {
-            return getProjectContext(project);
+    async getVaultContext(): Promise<string> {
+        return this.getCachedContext('vault', async () => {
+            return getVaultContext();
         });
     }
 
     /**
      * Get context for a specific entity type.
      */
-    async getEntityContext(entity: EntityType, projectName?: string): Promise<string> {
-        const project = projectName ?? this.currentProject;
-        if (!project) {
-            return '';
-        }
-
-        return this.getCachedContext(`entity:${project}:${entity}`, async () => {
-            return getSubdirectoryContext(project, entity);
+    async getEntityContext(entity: EntityType): Promise<string> {
+        return this.getCachedContext(`entity:${entity}`, async () => {
+            return getSubdirectoryContext(entity);
         });
     }
 
     /**
      * Get the full context chain from root to entity.
      */
-    async getEntityContextChain(entity: EntityType, projectName?: string): Promise<string> {
-        const project = projectName ?? this.currentProject;
-        if (!project) {
-            return this.getGlobalContext();
-        }
-
-        return this.getCachedContext(`entity-chain:${project}:${entity}`, async () => {
-            return getSubdirectoryContext(project, entity);
+    async getEntityContextChain(entity: EntityType): Promise<string> {
+        return this.getCachedContext(`entity-chain:${entity}`, async () => {
+            return getSubdirectoryContext(entity);
         });
     }
 
     /**
      * Get all relevant context for a task.
      */
-    async getFullContext(entity: EntityType, projectName?: string): Promise<FullContext> {
-        const [globalContext, projectContext, entityContext] = await Promise.all([
+    async getFullContext(entity: EntityType): Promise<FullContext> {
+        const [globalContext, vaultContext, entityContext] = await Promise.all([
             this.getGlobalContext(),
-            this.getProjectContext(projectName),
-            this.getEntityContext(entity, projectName),
+            this.getVaultContext(),
+            this.getEntityContext(entity),
         ]);
 
-        const combined = [globalContext, projectContext, entityContext]
+        const combined = [globalContext, vaultContext, entityContext]
             .filter(Boolean)
             .join('\n\n---\n\n');
 
         return {
             globalContext,
-            projectContext,
+            projectContext: vaultContext,
             entityContext,
             symbols: this.symbols,
             taskTokens: this.taskContext.tokens,

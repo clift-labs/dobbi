@@ -10,8 +10,6 @@ export interface EntityHeaderConfig {
     icon: string;
     /** Entity type label (e.g., 'Note', 'Todo', 'Event') */
     type: string;
-    /** Project name */
-    project: string;
     /** Entity title */
     title: string;
     /** Key-value metadata pairs to display (e.g., priority, due date) */
@@ -29,7 +27,7 @@ const MIN_WIDTH = 50;
  * └─────────────────────────────────────────────┘
  */
 export function renderEntityHeader(config: EntityHeaderConfig): void {
-    const { icon, type, project, title, meta } = config;
+    const { icon, type, title, meta } = config;
 
     // Build content lines
     const titleLine = `  "${title}"`;
@@ -46,7 +44,7 @@ export function renderEntityHeader(config: EntityHeaderConfig): void {
     }
 
     // Calculate box width based on longest visible line
-    const headerLabel = ` ${icon} ${type} · ${project} `;
+    const headerLabel = ` ${icon} ${type} `;
     const visibleLengths = contentLines.map(l => stripAnsi(l).length + 4); // +4 for │ padding
     const headerLabelLen = stripAnsi(headerLabel).length + 4; // +4 for ┌─ and ─┐
     const maxContent = Math.max(...visibleLengths, headerLabelLen, MIN_WIDTH);
@@ -85,7 +83,6 @@ export function entityPrompt(_type: string): string {
 
 export function noteHeaderConfig(state: {
     title: string;
-    project: string;
     content: string;
     isExisting: boolean;
 }): EntityHeaderConfig {
@@ -93,7 +90,6 @@ export function noteHeaderConfig(state: {
     return {
         icon: '📝',
         type: 'Note',
-        project: state.project,
         title: state.title,
         meta: [
             { label: 'lines', value: String(lineCount) },
@@ -106,7 +102,6 @@ export function noteHeaderConfig(state: {
 
 export function todoHeaderConfig(state: {
     title: string;
-    project: string;
     priority: 'low' | 'medium' | 'high';
     dueDate?: string;
     isExisting: boolean;
@@ -133,7 +128,6 @@ export function todoHeaderConfig(state: {
     return {
         icon: '✅',
         type: 'Todo',
-        project: state.project,
         title: state.title,
         meta,
     };
@@ -143,7 +137,6 @@ export function todoHeaderConfig(state: {
 
 export function eventHeaderConfig(state: {
     title: string;
-    project: string;
     startTime: string;
     endTime: string;
     location?: string;
@@ -177,7 +170,6 @@ export function eventHeaderConfig(state: {
     return {
         icon: '📅',
         type: 'Event',
-        project: state.project,
         title: state.title,
         meta,
     };

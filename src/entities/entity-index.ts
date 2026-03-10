@@ -9,7 +9,7 @@
 
 import { promises as fs } from 'fs';
 import path from 'path';
-import { getVaultRoot, getActiveProject } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 import { parseEntity, type EntityTypeName, type EntityLink } from './entity.js';
 import { loadEntityTypes } from './entity-type-config.js';
 import { extractPeopleMentions, extractEntityRefs } from '../context/mentions.js';
@@ -80,19 +80,12 @@ export class EntityIndex {
      */
     async build(): Promise<void> {
         const vaultRoot = await getVaultRoot();
-        const project = await getActiveProject();
-        if (!project) {
-            debug('index', 'No active project — skipping index build');
-            return;
-        }
-
-        const projectDir = path.join(vaultRoot, 'projects', project);
         const entityTypes = await loadEntityTypes();
 
         // Pass 1: collect all nodes
         for (const typeConfig of entityTypes) {
             const entityType = typeConfig.name;
-            const dir = path.join(projectDir, typeConfig.directory);
+            const dir = path.join(vaultRoot, typeConfig.directory);
 
             try {
                 const files = await fs.readdir(dir);
@@ -126,7 +119,7 @@ export class EntityIndex {
         const typeNames = entityTypes.map(t => t.name);
         for (const typeConfig of entityTypes) {
             const entityType = typeConfig.name;
-            const dir = path.join(projectDir, typeConfig.directory);
+            const dir = path.join(vaultRoot, typeConfig.directory);
 
             try {
                 const files = await fs.readdir(dir);

@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import inquirer from 'inquirer';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { requireProject, getVaultRoot } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 import { getResponse } from '../responses.js';
 import { debug } from '../utils/debug.js';
 import { bootstrapFeral } from '../feral/bootstrap.js';
@@ -42,7 +42,7 @@ interface ImportResult {
     entities: Array<{ category: ImportCategory; title: string }>;
 }
 
-async function processInboxItem(itemPath: string, project: string): Promise<ImportResult> {
+async function processInboxItem(itemPath: string): Promise<ImportResult> {
     const filename = path.basename(itemPath);
     const ext = path.extname(filename).toLowerCase();
 
@@ -67,7 +67,6 @@ async function processInboxItem(itemPath: string, project: string): Promise<Impo
         ctx = await feral.runner.run('inbox.import', {
             file_path: itemPath,
             filename,
-            project,
         });
     } catch (err) {
         debug('inbox', err);
@@ -99,9 +98,9 @@ async function processInboxItem(itemPath: string, project: string): Promise<Impo
 // LIST INBOX ITEMS
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function listInboxItems(project: string): Promise<string[]> {
+async function listInboxItems(): Promise<string[]> {
     const vaultRoot = await getVaultRoot();
-    const inboxDir = path.join(vaultRoot, 'projects', project, 'inbox');
+    const inboxDir = path.join(vaultRoot, 'inbox');
 
     try {
         const files = await fs.readdir(inboxDir);
@@ -127,14 +126,14 @@ export interface ProcessInboxResult {
  * Process all inbox items headlessly (no interactive prompts).
  * Failed items are silently skipped and left in the inbox.
  */
-export async function processInbox(project: string): Promise<ProcessInboxResult> {
-    const items = await listInboxItems(project);
+export async function processInbox(): Promise<ProcessInboxResult> {
+    const items = await listInboxItems();
     let processed = 0;
     let skipped = 0;
 
     for (const itemPath of items) {
         try {
-            const result = await processInboxItem(itemPath, project);
+            const result = await processInboxItem(itemPath);
             if (result.success) {
                 processed += result.entities.length;
             } else {
@@ -158,9 +157,8 @@ export const inboxCommand = new Command('inbox')
     .argument('[content]', 'File path or text content to add')
     .action(async (action?: string, content?: string) => {
         try {
-            const project = await requireProject();
             const vaultRoot = await getVaultRoot();
-            const inboxDir = path.join(vaultRoot, 'projects', project, 'inbox');
+            const inboxDir = path.join(vaultRoot, 'inbox');
 
             // Ensure inbox directory exists
             await fs.mkdir(inboxDir, { recursive: true });
@@ -196,7 +194,7 @@ export const inboxCommand = new Command('inbox')
             }
 
             // Process inbox items
-            const items = await listInboxItems(project);
+            const items = await listInboxItems();
 
             if (items.length === 0) {
                 const msg = getResponse('inbox_empty');
@@ -219,7 +217,7 @@ export const inboxCommand = new Command('inbox')
                 console.log(chalk.cyan(`─── ${filename} ───`));
 
                 try {
-                    const result = await processInboxItem(itemPath, project);
+                    const result = await processInboxItem(itemPath);
 
                     if (result.success) {
                         totalEntities += result.entities.length;

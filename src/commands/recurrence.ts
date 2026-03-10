@@ -4,7 +4,7 @@ import inquirer from 'inquirer';
 import { promises as fs } from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
-import { requireProject, getVaultRoot } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 import {
     slugify,
     generateEntityId,
@@ -69,7 +69,6 @@ export async function ensureRecurrenceType(): Promise<void> {
 
 interface RecurrenceState {
     title: string;
-    project: string;
     recurrenceType: RecurrenceTargetType;
     cadence: RecurrenceCadence;
     cadenceDetails: CadenceDetails;
@@ -102,7 +101,6 @@ async function saveRecurrence(state: RecurrenceState): Promise<string> {
         recurrenceType: state.recurrenceType,
         cadence: state.cadence,
         cadenceDetails: state.cadenceDetails,
-        project: state.project,
         tags: ['recurrence'],
         created: new Date().toISOString(),
     };
@@ -122,9 +120,9 @@ async function saveRecurrence(state: RecurrenceState): Promise<string> {
     return filepath;
 }
 
-async function loadAllRecurrences(project: string): Promise<RecurrenceState[]> {
+async function loadAllRecurrences(): Promise<RecurrenceState[]> {
     const vaultRoot = await getVaultRoot();
-    const dir = path.join(vaultRoot, 'projects', project, 'recurrences');
+    const dir = path.join(vaultRoot, 'recurrences');
 
     let files: string[];
     try {
@@ -140,7 +138,6 @@ async function loadAllRecurrences(project: string): Promise<RecurrenceState[]> {
         const { data, content } = matter(raw);
         recurrences.push({
             title: data.title ?? file.replace('.md', ''),
-            project,
             recurrenceType: data.recurrenceType ?? 'todo',
             cadence: data.cadence ?? 'monthly',
             cadenceDetails: data.cadenceDetails ?? {},
@@ -153,8 +150,8 @@ async function loadAllRecurrences(project: string): Promise<RecurrenceState[]> {
     return recurrences;
 }
 
-async function findRecurrence(project: string, name: string): Promise<RecurrenceState | null> {
-    const all = await loadAllRecurrences(project);
+async function findRecurrence(name: string): Promise<RecurrenceState | null> {
+    const all = await loadAllRecurrences();
     const slug = slugify(name);
     return all.find(r =>
         slugify(r.title) === slug ||
@@ -179,10 +176,10 @@ export interface GenerateRecurrencesResult {
  * Generate concrete entities from recurrence templates.
  * Headless — no console output. Throws on fatal errors.
  */
-export async function generateRecurrences(project: string, days?: number): Promise<GenerateRecurrencesResult> {
+export async function generateRecurrences(days?: number): Promise<GenerateRecurrencesResult> {
     await ensureRecurrenceType();
     const daysAhead = days ?? 60;
-    const recurrences = await loadAllRecurrences(project);
+    const recurrences = await loadAllRecurrences();
     if (recurrences.length === 0) {
         return { created: 0, skipped: 0 };
     }
@@ -215,7 +212,6 @@ export async function generateRecurrences(project: string, days?: number): Promi
                 cadenceDetails: rec.cadenceDetails,
                 priority: rec.priority,
                 blackoutWindows: rec.blackoutWindows,
-                project,
             } as Record<string, unknown>,
         };
 
@@ -231,7 +227,7 @@ export async function generateRecurrences(project: string, days?: number): Promi
 // INTERACTIVE CREATE
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function interactiveCreate(project: string): Promise<void> {
+async function interactiveCreate(): Promise<void> {
     const { title } = await inquirer.prompt([{
         type: 'input',
         name: 'title',
@@ -376,7 +372,6 @@ async function interactiveCreate(project: string): Promise<void> {
 
     const state: RecurrenceState = {
         title,
-        project,
         recurrenceType,
         cadence,
         cadenceDetails,
@@ -393,8 +388,8 @@ async function interactiveCreate(project: string): Promise<void> {
 // EDIT
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function editRecurrence(project: string, name: string): Promise<void> {
-    const rec = await findRecurrence(project, name);
+async function editRecurrence(name: string): Promise<void> {
+    const rec = await findRecurrence(name);
     if (!rec) {
         console.log(chalk.red(`\nRecurrence "${name}" not found.`));
         return;
@@ -478,8 +473,8 @@ async function editRecurrence(project: string, name: string): Promise<void> {
 // DELETE
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function deleteRecurrence(project: string, name: string): Promise<void> {
-    const rec = await findRecurrence(project, name);
+async function deleteRecurrence(name: string): Promise<void> {
+    const rec = await findRecurrence(name);
     if (!rec) {
         console.log(chalk.red(`\nRecurrence "${name}" not found.`));
         return;
@@ -519,11 +514,9 @@ export const recurrenceCommand = new Command('recurrence')
     .argument('[args...]', 'Name for edit/delete, or days for generate')
     .action(async (action?: string, args?: string[]) => {
         try {
-            const project = await requireProject();
-
             switch (action) {
                 case 'create':
-                    await interactiveCreate(project);
+                    await interactiveCreate();
                     break;
 
                 case 'list':
@@ -536,7 +529,7 @@ export const recurrenceCommand = new Command('recurrence')
                         console.log(chalk.yellow('Usage: recurrence edit <name>'));
                         return;
                     }
-                    await editRecurrence(project, name);
+                    await editRecurrence(name);
                     break;
                 }
 
@@ -547,7 +540,7 @@ export const recurrenceCommand = new Command('recurrence')
                         console.log(chalk.yellow('Usage: recurrence delete <name>'));
                         return;
                     }
-                    await deleteRecurrence(project, name);
+                    await deleteRecurrence(name);
                     break;
                 }
 
@@ -558,7 +551,7 @@ export const recurrenceCommand = new Command('recurrence')
                         return;
                     }
                     console.log(chalk.gray(`\nGenerating concrete entities for the next ${days} days...`));
-                    const result = await generateRecurrences(project, days);
+                    const result = await generateRecurrences(days);
                     console.log(chalk.green(`\n✓ Generated ${result.created} concrete entities (${result.skipped} skipped/blacked-out)`));
                     break;
                 }

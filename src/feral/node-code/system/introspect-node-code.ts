@@ -13,7 +13,7 @@ import type { ConfigurationDescription, ResultDescription } from '../../configur
 import { AbstractNodeCode } from '../abstract-node-code.js';
 import { NodeCodeCategory } from '../node-code.js';
 
-import { loadState, findVaultRoot, listProjects } from '../../../state/manager.js';
+import { loadState, findVaultRoot } from '../../../state/manager.js';
 import { getConfiguredProviders, getEffectiveConfig } from '../../../config.js';
 import { getDaemonStatus } from '../../../service/daemon.js';
 
@@ -81,7 +81,6 @@ export class IntrospectNodeCode extends AbstractNodeCode {
                     hasCar: state.hasCar,
                     cityLive: state.cityLive,
                     cityWork: state.cityWork,
-                    activeProject: state.activeProject,
                     lastUsed: state.lastUsed,
                     interviewComplete: state.interviewComplete,
                 };
@@ -105,12 +104,8 @@ export class IntrospectNodeCode extends AbstractNodeCode {
 
             case 'vault': {
                 const root = await findVaultRoot();
-                const projects = root ? await listProjects() : [];
-                const state = await loadState();
                 return {
                     root,
-                    activeProject: state.activeProject,
-                    projects,
                 };
             }
         }

@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
 import path from 'path';
-import { requireProject, getVaultRoot } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 import { getResponse } from '../responses.js';
 import {
     createEntityMeta,
@@ -30,7 +30,6 @@ interface PersonState {
     email: string;
     handle: string;
     tags: string[];
-    project: string;
     content: string;
     filepath?: string;
     isExisting: boolean;
@@ -40,7 +39,6 @@ async function savePerson(state: PersonState): Promise<string> {
     const dir = await ensureEntityDir('person');
     const meta = createEntityMeta('person', state.name, {
         tags: state.tags,
-        project: state.project,
     });
     const id = state.filepath ? path.basename(state.filepath, '.md') : meta.id;
     const filepath = state.filepath ?? path.join(dir, `${id}.md`);
@@ -78,8 +76,6 @@ async function editPerson(titleOrFilename: string): Promise<void> {
     }
 
     const { filepath, meta, content } = found;
-    const project = await requireProject();
-
     const answers = await inquirer.prompt([
         { type: 'input', name: 'name', message: 'Name:', default: meta.title as string },
         { type: 'input', name: 'company', message: 'Company:', default: (meta.company as string) ?? '' },
@@ -157,8 +153,6 @@ export const personCommand = new Command('person')
     .argument('[name...]', 'Person name or identifier')
     .action(async (action?: string, nameWords?: string[]) => {
         try {
-            const project = await requireProject();
-
             // Route to subcommands
             if (action === 'list') {
                 await listEntities('people');
@@ -229,7 +223,6 @@ export const personCommand = new Command('person')
                 email: answers.email,
                 handle: answers.handle,
                 tags: answers.tags ? answers.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [],
-                project,
                 content: answers.content || '',
                 isExisting: false,
             };

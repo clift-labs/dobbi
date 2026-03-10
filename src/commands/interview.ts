@@ -8,7 +8,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
-import { saveProfile, createProject, setActiveProject } from '../state/manager.js';
+import { saveProfile } from '../state/manager.js';
 import { loadCalConfig, saveCalConfig } from './cal.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,10 +69,6 @@ const REACTIONS = {
     cal_work: [
         `   ${chalk.cyan(`*files it under "important"*`)} Work calendar too! Dobbi will track both, sir!`,
         `   ${chalk.cyan(`*nods professionally*`)} Two calendars! Dobbi is very thorough.`,
-    ],
-    project: [
-        (p: string) => `   ${chalk.cyan(`*labels a fresh folder*`)} "${chalk.bold(p)}" — what a fine name for a project!`,
-        (p: string) => `   ${chalk.cyan(`*writes it in big letters*`)} ${chalk.bold(p)}! Dobbi will set everything up!`,
     ],
 };
 
@@ -215,16 +211,6 @@ export async function runInterview(): Promise<void> {
         await pause();
     }
 
-    // 10. First project name
-    const { firstProject } = await inquirer.prompt([{
-        type: 'input',
-        name: 'firstProject',
-        message: chalk.cyan('🤖 What shall Dobbi call your first project?'),
-        default: 'personal',
-    }]);
-    console.log(pick(REACTIONS.project)(firstProject.trim()));
-    await pause();
-
     // Save everything
     await saveProfile({
         userName: name.trim(),
@@ -236,7 +222,6 @@ export async function runInterview(): Promise<void> {
         cityWork: cityWork.trim() || undefined,
         personalCalUrl: personalCalUrl.trim() || undefined,
         workCalUrl: workCalUrl.trim() || undefined,
-        firstProject: firstProject.trim() || undefined,
     });
 
     // Auto-configure calendars from provided URLs
@@ -251,16 +236,6 @@ export async function runInterview(): Promise<void> {
             cfg.calendars.push({ id: 'work', name: 'Work', url: workUrl });
         }
         await saveCalConfig(cfg);
-    }
-
-    // Create and activate the first project
-    const projectName = firstProject.trim() || 'personal';
-    try {
-        await createProject(projectName);
-        await setActiveProject(projectName);
-    } catch {
-        // Project may already exist — just activate it
-        await setActiveProject(projectName);
     }
 
     await printLines(OUTRO_LINES);

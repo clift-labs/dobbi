@@ -10,7 +10,7 @@ import path from 'path';
 import chalk from 'chalk';
 import { getResponse } from '../responses.js';
 import { getDaemonStatus } from '../service/daemon.js';
-import { findVaultRoot, getActiveProject } from '../state/manager.js';
+import { findVaultRoot } from '../state/manager.js';
 
 /**
  * Load the ASCII art from dobbi.txt (bundled alongside the source).
@@ -31,7 +31,6 @@ async function loadAsciiArt(): Promise<string> {
  */
 async function gatherState(): Promise<{
     serviceRunning: boolean;
-    project: string | null;
     vault: string | null;
 }> {
     const [daemon, vault] = await Promise.all([
@@ -39,14 +38,8 @@ async function gatherState(): Promise<{
         findVaultRoot().catch(() => null),
     ]);
 
-    let project: string | null = null;
-    if (vault) {
-        project = await getActiveProject().catch(() => null);
-    }
-
     return {
         serviceRunning: daemon.running,
-        project,
         vault,
     };
 }
@@ -74,14 +67,10 @@ export async function printStartupBanner(): Promise<void> {
         ? chalk.green('●') + chalk.white(' Service running')
         : chalk.red('○') + chalk.white(' Service stopped');
 
-    const projectLabel = state.project
-        ? chalk.white(`📁 ${state.project}`)
-        : chalk.gray('📁 no project');
-
     const vaultLabel = state.vault
         ? chalk.white(`🏠 ${path.basename(state.vault)}`)
         : chalk.yellow('🏠 no vault (run dobbi init)');
 
-    console.log(`  ${serviceIcon}  │  ${projectLabel}  │  ${vaultLabel}`);
+    console.log(`  ${serviceIcon}  │  ${vaultLabel}`);
     console.log(chalk.gray('  Tab-complete commands • Up/Down for history • Type "exit" or Ctrl+D to leave\n'));
 }

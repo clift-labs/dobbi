@@ -20,8 +20,8 @@ import { getModelForCapability, createDobbiSystemPrompt } from '../llm/router.js
 import { debug } from '../utils/debug.js';
 import { ChatLogger, generateChatId } from '../utils/chat-logger.js';
 import { loadEntityTypes } from '../entities/entity-type-config.js';
-import { getActiveProject, getUserName } from '../state/manager.js';
-import { getProjectContext } from '../context/reader.js';
+import { getUserName } from '../state/manager.js';
+import { getVaultContext } from '../context/reader.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // IN-MEMORY PROCESS SOURCE
@@ -203,28 +203,24 @@ async function _feralChatHeadlessInner(
 ): Promise<string> {
     // ── Bootstrap Feral + load entity types + vault context ────────
     const inMemorySource = new InMemoryProcessSource();
-    const [runtime, entityTypes, activeProject, userName] = await Promise.all([
+    const [runtime, entityTypes, userName] = await Promise.all([
         bootstrapFeral([inMemorySource]),
         loadEntityTypes().catch(() => []),
-        getActiveProject().catch(() => null),
         getUserName().catch(() => 'friend'),
     ]);
 
-    await logger.log('start', { chatId, userInput, activeProject });
+    await logger.log('start', { chatId, userInput });
 
-    // Load project vault context (.socks.md chain) if a project is active
+    // Load vault context (.socks.md chain)
     // Scrub any secrets that may have been accidentally pasted into .socks.md files
-    const vaultContext = activeProject
-        ? scrubSecrets(await getProjectContext(activeProject).catch(() => '')) as string
-        : '';
+    const vaultContext = scrubSecrets(await getVaultContext().catch(() => '')) as string;
 
     // Build global variables block for the LLM
     const today = new Date().toISOString().split('T')[0];
     const globalsBlock = [
         `- user_name: ${userName}`,
         `- current_date: ${today}`,
-        activeProject ? `- active_project: ${activeProject}` : null,
-    ].filter(Boolean).join('\n');
+    ].join('\n');
 
     const allNodes = runtime.catalog.getAllCatalogNodes();
 

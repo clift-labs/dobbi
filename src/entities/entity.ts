@@ -7,7 +7,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import { debug } from '../utils/debug.js';
-import { getVaultRoot, getActiveProject } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 import { getEntityType, loadEntityTypes } from './entity-type-config.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -64,7 +64,6 @@ export interface EntityMeta {
     created: string;           // ISO 8601
     updated?: string;          // ISO 8601, set on every save
     tags: string[];
-    project: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -174,7 +173,7 @@ export function slugify(title: string): string {
 export function createEntityMeta(
     entityType: EntityTypeName,
     title: string,
-    opts: { tags?: string[]; project?: string } = {},
+    opts: { tags?: string[] } = {},
 ): EntityMeta {
     return {
         id: generateEntityId(entityType),
@@ -182,7 +181,6 @@ export function createEntityMeta(
         entityType,
         created: new Date().toISOString(),
         tags: opts.tags ?? [],
-        project: opts.project ?? '',
     };
 }
 
@@ -196,15 +194,11 @@ export function createEntityMeta(
  */
 export async function getEntityDir(entityType: EntityTypeName): Promise<string> {
     const vaultRoot = await getVaultRoot();
-    const project = await getActiveProject();
-    if (!project) {
-        throw new Error('No active project. Use project.use first.');
-    }
     const typeConfig = await getEntityType(entityType);
     if (!typeConfig) {
         throw new Error(`Unknown entity type: "${entityType}". Check ~/.dobbi/entity-types.json.`);
     }
-    return path.join(vaultRoot, 'projects', project, typeConfig.directory);
+    return path.join(vaultRoot, typeConfig.directory);
 }
 
 /**

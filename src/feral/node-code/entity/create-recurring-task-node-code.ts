@@ -18,7 +18,6 @@ import {
     ensureEntityDir,
     writeEntity,
 } from '../../../entities/entity.js';
-import { getActiveProject } from '../../../state/manager.js';
 import { getEntityType } from '../../../entities/entity-type-config.js';
 import { getEntityIndex } from '../../../entities/entity-index.js';
 import { spawn, type ParsedEntity } from '../../../entities/spawner.js';
@@ -64,12 +63,6 @@ export class CreateRecurringTaskNodeCode extends AbstractNodeCode {
             return this.result(ResultStatus.ERROR, 'Missing title in context.');
         }
 
-        const project = await getActiveProject();
-        if (!project) {
-            context.set('error', 'No active project.');
-            return this.result(ResultStatus.ERROR, 'No active project.');
-        }
-
         // ── Resolve config values ────────────────────────────────────────
         const cadence = this.resolveValue('cadence', context, 'weekly') as string;
         const priority = this.resolveValue('priority', context, 'medium') as string;
@@ -95,7 +88,6 @@ export class CreateRecurringTaskNodeCode extends AbstractNodeCode {
             title,
             entityType: 'recurrence',
             created: new Date().toISOString(),
-            project,
             tags: ['recurring'],
             cadence,
             cadenceDetails,

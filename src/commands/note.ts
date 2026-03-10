@@ -4,7 +4,7 @@ import inquirer from 'inquirer';
 import { promises as fs } from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
-import { requireProject, getVaultRoot } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 import { getEnrichedContext } from '../context/reader.js';
 import { getModelForCapability, createDobbiSystemPrompt } from '../llm/router.js';
 import { getResponse } from '../responses.js';
@@ -18,15 +18,13 @@ import { findEntityByTitle, trashEntity, generateEntityId } from '../entities/en
 interface NoteState {
     title: string;
     content: string;
-    project: string;
     filepath?: string;  // If editing existing note
     isExisting: boolean;
 }
 
-async function findExistingNote(project: string, titleOrFilename: string): Promise<{ filepath: string; title: string; content: string } | null> {
+async function findExistingNote(titleOrFilename: string): Promise<{ filepath: string; title: string; content: string } | null> {
     const found = await findEntityByTitle('note', titleOrFilename);
     if (!found) return null;
-    if (found.meta.project && found.meta.project !== project) return null;
     return {
         filepath: found.filepath,
         title: found.meta.title as string,
@@ -37,7 +35,7 @@ async function findExistingNote(project: string, titleOrFilename: string): Promi
 async function reviewNote(state: NoteState): Promise<string> {
     console.log(chalk.gray('\n' + getResponse('note_reviewing')));
 
-    const context = await getEnrichedContext(state.project, 'notes', state.content);
+    const context = await getEnrichedContext('notes', state.content);
     const llm = await getModelForCapability('reason');
     const systemPrompt = createDobbiSystemPrompt(context);
 
@@ -56,7 +54,7 @@ ${state.content}`,
 async function generateQuestions(state: NoteState): Promise<string[]> {
     console.log(chalk.gray('\n' + getResponse('thinking')));
 
-    const context = await getEnrichedContext(state.project, 'notes', state.content);
+    const context = await getEnrichedContext('notes', state.content);
     const llm = await getModelForCapability('reason');
     const systemPrompt = createDobbiSystemPrompt(context);
 
@@ -80,7 +78,7 @@ ${state.content}`,
 async function modifyNote(state: NoteState, feedback: string): Promise<string> {
     console.log(chalk.gray('\n' + getResponse('processing')));
 
-    const context = await getEnrichedContext(state.project, 'notes', state.content);
+    const context = await getEnrichedContext('notes', state.content);
     const llm = await getModelForCapability('reason');
     const systemPrompt = createDobbiSystemPrompt(context);
 
@@ -105,7 +103,7 @@ async function formatAsMarkdown(state: NoteState): Promise<string> {
     console.log(chalk.gray('\n' + getResponse('note_formatted')));
 
     try {
-        const context = await getEnrichedContext(state.project, 'notes', state.content);
+        const context = await getEnrichedContext('notes', state.content);
         const llm = await getModelForCapability('format');
         const systemPrompt = createDobbiSystemPrompt(context);
 
@@ -147,7 +145,7 @@ ${state.content}`,
 
 async function saveNote(state: NoteState, formatContent: boolean = true): Promise<string> {
     const vaultRoot = await getVaultRoot();
-    const notesDir = path.join(vaultRoot, 'projects', state.project, 'notes');
+    const notesDir = path.join(vaultRoot, 'notes');
 
     // Ensure notes directory exists
     await fs.mkdir(notesDir, { recursive: true });
@@ -171,7 +169,6 @@ async function saveNote(state: NoteState, formatContent: boolean = true): Promis
 id: ${entityId}
 title: "${state.title}"
 created: ${today}
-project: ${state.project}
 tags: [note]
 ---
 
@@ -203,7 +200,7 @@ type DiagramType = 'flowchart' | 'class' | 'sequence';
 async function generateDiagram(state: NoteState, diagramType: DiagramType): Promise<string> {
     console.log(chalk.gray('\n' + getResponse('diagram_generating')));
 
-    const context = await getEnrichedContext(state.project, 'notes', state.content);
+    const context = await getEnrichedContext('notes', state.content);
     const llm = await getModelForCapability('reason');
     const systemPrompt = createDobbiSystemPrompt(context);
 
@@ -308,9 +305,6 @@ export const noteCommand = new Command('note')
                 return;
             }
 
-            // Require a project
-            const project = await requireProject();
-
             // Parse: first word = title, rest = inline body
             let title = words.length > 0 ? words[0] : undefined;
             const inlineBody = words.length > 1 ? words.slice(1).join(' ') : undefined;
@@ -329,7 +323,7 @@ export const noteCommand = new Command('note')
             }
 
             // Check if note already exists
-            const existing = await findExistingNote(project, title!);
+            const existing = await findExistingNote(title!);
 
             let state: NoteState;
 
@@ -342,7 +336,6 @@ export const noteCommand = new Command('note')
                     state = {
                         title: existing.title,
                         content: updatedContent,
-                        project,
                         filepath: existing.filepath,
                         isExisting: true,
                     };
@@ -355,7 +348,6 @@ export const noteCommand = new Command('note')
                 state = {
                     title: existing.title,
                     content: existing.content,
-                    project,
                     filepath: existing.filepath,
                     isExisting: true,
                 };
@@ -364,7 +356,6 @@ export const noteCommand = new Command('note')
                 state = {
                     title: title!,
                     content: inlineBody,
-                    project,
                     isExisting: false,
                 };
                 const filepath = await saveNote(state);
@@ -384,11 +375,10 @@ export const noteCommand = new Command('note')
                 state = {
                     title: title!,
                     content: content.trim(),
-                    project,
                     isExisting: false,
                 };
 
-                console.log(chalk.green(`\n✓ Note started for project "${project}"`));
+                console.log(chalk.green(`\n✓ Note started`));
             }
 
             pushCrumb('note');

@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import { promises as fs } from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
-import { requireProject, getVaultRoot } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 
 /**
  * Supported entity types and their corresponding subdirectory names.
@@ -25,21 +25,20 @@ const ENTITY_ICONS: Record<EntityType, string> = {
  * Reads .md files from `projects/<project>/<entityType>/`, parses
  * gray-matter frontmatter, and prints a styled table.
  */
-export async function listEntities(entityType: EntityType, project?: string): Promise<void> {
-    const proj = project ?? await requireProject();
+export async function listEntities(entityType: EntityType): Promise<void> {
     const vaultRoot = await getVaultRoot();
-    const dir = path.join(vaultRoot, 'projects', proj, entityType);
+    const dir = path.join(vaultRoot, entityType);
 
     let files: string[];
     try {
         files = (await fs.readdir(dir)).filter(f => f.endsWith('.md'));
     } catch {
-        console.log(chalk.gray(`\nNo ${entityType} found for project "${proj}".`));
+        console.log(chalk.gray(`\nNo ${entityType} found.`));
         return;
     }
 
     if (files.length === 0) {
-        console.log(chalk.gray(`\nNo ${entityType} found for project "${proj}".`));
+        console.log(chalk.gray(`\nNo ${entityType} found.`));
         return;
     }
 
@@ -53,7 +52,7 @@ export async function listEntities(entityType: EntityType, project?: string): Pr
     );
 
     const icon = ENTITY_ICONS[entityType];
-    console.log(chalk.cyan(`\n${icon} ${capitalize(entityType)} in "${proj}" (${items.length})\n`));
+    console.log(chalk.cyan(`\n${icon} ${capitalize(entityType)} (${items.length})\n`));
 
     // ── Type-specific rendering ────────────────────────────────────────
     switch (entityType) {

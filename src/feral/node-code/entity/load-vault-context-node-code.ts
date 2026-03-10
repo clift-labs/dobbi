@@ -14,7 +14,6 @@ import type { ConfigurationDescription, ResultDescription } from '../../configur
 import { AbstractNodeCode } from '../abstract-node-code.js';
 import { NodeCodeCategory } from '../node-code.js';
 import { getSubdirectoryContext } from '../../../context/reader.js';
-import { getActiveProject } from '../../../state/manager.js';
 import type { EntityTypeName } from '../../../entities/entity.js';
 
 /**
@@ -70,13 +69,7 @@ export class LoadVaultContextNodeCode extends AbstractNodeCode {
         }
 
         try {
-            const project = await getActiveProject();
-            if (!project) {
-                context.set(contextPath, '');
-                return this.result(ResultStatus.OK, 'No active project — vault context is empty.');
-            }
-
-            const vaultContext = await getSubdirectoryContext(project, subdirectory);
+            const vaultContext = await getSubdirectoryContext(subdirectory);
             context.set(contextPath, vaultContext);
 
             return this.result(ResultStatus.OK, `Loaded vault context for ${entityType} (${subdirectory}).`);

@@ -9,7 +9,7 @@ import chalk from 'chalk';
 import path from 'path';
 import { promises as fsPromises } from 'fs';
 import { loadConfig, saveConfig, DOBBI_DIR } from '../config.js';
-import { requireProject } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 import { parseIcsFeed } from '../utils/ics-parser.js';
 import {
     ensureEntityDir,
@@ -192,7 +192,6 @@ export interface SyncCalendarResult {
  */
 async function syncOneCalendar(
     cal: CalendarEntry,
-    project: string,
     daysAhead: number,
 ): Promise<SyncCalendarResult> {
     const now = new Date();
@@ -265,7 +264,6 @@ async function syncOneCalendar(
         } else {
             const baseMeta = createEntityMeta('event', ev.title, {
                 tags: ['calendar'],
-                project,
             });
 
             const meta: Record<string, unknown> = {
@@ -306,7 +304,6 @@ export async function syncCalendar(opts?: { days?: number; calendarId?: string }
         throw new Error('No calendars configured. Use "dobbi cal add <name> <url>" first.');
     }
 
-    const project = await requireProject();
     await ensureEventType();
 
     const daysAhead = opts?.days ?? 60;
@@ -326,7 +323,7 @@ export async function syncCalendar(opts?: { days?: number; calendarId?: string }
     // Sync each calendar, aggregate results
     const totals: SyncCalendarResult = { created: 0, updated: 0, unchanged: 0 };
     for (const cal of targets) {
-        const result = await syncOneCalendar(cal, project, daysAhead);
+        const result = await syncOneCalendar(cal, daysAhead);
         totals.created += result.created;
         totals.updated += result.updated;
         totals.unchanged += result.unchanged;

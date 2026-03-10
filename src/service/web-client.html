@@ -89,21 +89,6 @@
     flex-shrink: 0;
   }
 
-  .project-select {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-family: inherit;
-    font-size: 11px;
-    padding: 4px 8px;
-    border-radius: 4px;
-    outline: none;
-    cursor: pointer;
-    max-width: 160px;
-  }
-
-  .project-select:focus { border-color: var(--cyan); }
-
   .ws-status {
     font-size: 11px;
     color: var(--dim);
@@ -575,9 +560,6 @@
       <div class="stat"><span class="stat-label">Uptime</span><span class="stat-value" id="stat-uptime">--</span></div>
     </div>
     <div class="header-right">
-      <select class="project-select" id="project-select" title="Active project">
-        <option value="">No project</option>
-      </select>
       <div class="ws-status" id="ws-status"><span class="dot"></span>Connected</div>
     </div>
   </div>
@@ -626,7 +608,6 @@
   const chatInput = document.getElementById('chat-input');
   const chatSend = document.getElementById('chat-send');
   const wsStatusEl = document.getElementById('ws-status');
-  const projectSelect = document.getElementById('project-select');
   const statQueue = document.getElementById('stat-queue');
   const statGraph = document.getElementById('stat-graph');
   const statMem = document.getElementById('stat-mem');
@@ -669,14 +650,6 @@
     } catch { /* ignore */ }
   }
 
-  async function fetchProjects() {
-    try {
-      const res = await fetch('/api/projects');
-      const data = await res.json();
-      renderProjectSelect(data.projects || [], data.active);
-    } catch { /* ignore */ }
-  }
-
   function formatUptime(seconds) {
     if (seconds < 60) return seconds + 's';
     if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
@@ -684,30 +657,6 @@
     const m = Math.floor((seconds % 3600) / 60);
     return h + 'h ' + m + 'm';
   }
-
-  function renderProjectSelect(projects, active) {
-    projectSelect.innerHTML = projects.length === 0
-      ? '<option value="">No projects</option>'
-      : projects.map(p =>
-          '<option value="' + esc(p) + '"' + (p === active ? ' selected' : '') + '>' + esc(p) + '</option>'
-        ).join('');
-  }
-
-  projectSelect.addEventListener('change', async () => {
-    const project = projectSelect.value;
-    if (!project) return;
-    try {
-      await fetch('/api/projects/active', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project }),
-      });
-      // Refresh all panels with new project data
-      fetchToday();
-      fetchCalendar();
-      fetchStatus();
-    } catch { /* ignore */ }
-  });
 
   // ── Rendering ──────────────────────────────────────────────
 
@@ -1117,7 +1066,6 @@
   fetchToday();
   fetchCalendar();
   fetchStatus();
-  fetchProjects();
   connectWs();
 
   // Poll status every 30s

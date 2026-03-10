@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { getActiveProject, getVaultRoot } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 import { parseEntity } from '../entities/entity.js';
 import { debug } from '../utils/debug.js';
 import { getResponse } from '../responses.js';
@@ -95,70 +95,54 @@ async function scanDir(dir: string): Promise<{ meta: Record<string, unknown>; co
 
 async function populateItems(days: DayColumn[]): Promise<void> {
     const vaultRoot = await getVaultRoot();
-    const project = await getActiveProject();
 
     const dateSet = new Set(days.map(d => d.date));
     const dateMap = new Map(days.map(d => [d.date, d]));
 
     // Scan todos — match on dueDate
-    const todoDirs: string[] = [path.join(vaultRoot, 'global', 'todos')];
-    if (project) {
-        todoDirs.push(path.join(vaultRoot, 'projects', project, 'todos'));
-    }
-
-    for (const dir of todoDirs) {
-        const entities = await scanDir(dir);
-        for (const { meta } of entities) {
-            const due = meta.dueDate as string | undefined;
-            if (due && dateSet.has(due)) {
-                const day = dateMap.get(due)!;
-                day.items.push({
-                    title: (meta.title as string) || 'Untitled',
-                    type: 'todo',
-                    status: meta.status as string | undefined,
-                    priority: meta.priority as string | undefined,
-                });
-            }
+    const todoDir = path.join(vaultRoot, 'todos');
+    const todoEntities = await scanDir(todoDir);
+    for (const { meta } of todoEntities) {
+        const due = meta.dueDate as string | undefined;
+        if (due && dateSet.has(due)) {
+            const day = dateMap.get(due)!;
+            day.items.push({
+                title: (meta.title as string) || 'Untitled',
+                type: 'todo',
+                status: meta.status as string | undefined,
+                priority: meta.priority as string | undefined,
+            });
         }
     }
 
     // Scan events — match on startDate (YYYY-MM-DD prefix)
-    const eventDirs: string[] = [path.join(vaultRoot, 'global', 'events')];
-    if (project) {
-        eventDirs.push(path.join(vaultRoot, 'projects', project, 'events'));
-    }
-
-    for (const dir of eventDirs) {
-        const entities = await scanDir(dir);
-        for (const { meta } of entities) {
-            const start = meta.startDate as string | undefined;
-            if (!start) continue;
-            const datePrefix = start.slice(0, 10); // YYYY-MM-DD
-            if (dateSet.has(datePrefix)) {
-                const day = dateMap.get(datePrefix)!;
-                // Extract time if full ISO or "YYYY-MM-DD HH:mm"
-                const timePart = start.length > 10 ? start.slice(11, 16) : undefined;
-                day.items.push({
-                    title: (meta.title as string) || 'Untitled',
-                    type: 'event',
-                    time: timePart,
-                });
-            }
+    const eventDir = path.join(vaultRoot, 'events');
+    const eventEntities = await scanDir(eventDir);
+    for (const { meta } of eventEntities) {
+        const start = meta.startDate as string | undefined;
+        if (!start) continue;
+        const datePrefix = start.slice(0, 10); // YYYY-MM-DD
+        if (dateSet.has(datePrefix)) {
+            const day = dateMap.get(datePrefix)!;
+            const timePart = start.length > 10 ? start.slice(11, 16) : undefined;
+            day.items.push({
+                title: (meta.title as string) || 'Untitled',
+                type: 'event',
+                time: timePart,
+            });
         }
     }
 
     // Scan todonts — active for any day in the range
-    if (project) {
-        const todontDir = path.join(vaultRoot, 'projects', project, 'todonts');
-        const entities = await scanDir(todontDir);
-        for (const { meta } of entities) {
-            for (const day of days) {
-                if (isTodontActive(meta, day.date)) {
-                    day.items.push({
-                        title: (meta.title as string) || 'Untitled',
-                        type: 'todont',
-                    });
-                }
+    const todontDir = path.join(vaultRoot, 'todonts');
+    const todontEntities = await scanDir(todontDir);
+    for (const { meta } of todontEntities) {
+        for (const day of days) {
+            if (isTodontActive(meta, day.date)) {
+                day.items.push({
+                    title: (meta.title as string) || 'Untitled',
+                    type: 'todont',
+                });
             }
         }
     }

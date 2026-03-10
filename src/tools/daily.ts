@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
-import { getVaultRoot, getActiveProject, listProjects } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 import { registerServiceTool, type ServiceToolResult } from './types.js';
 import { debug } from '../utils/debug.js';
 
@@ -19,22 +19,19 @@ function getDayName(date: Date): string {
 
 interface DailyItem {
     type: 'task' | 'note' | 'event' | 'research';
-    project: string;
     title: string;
     content: string;
     metadata?: Record<string, unknown>;
 }
 
-async function gatherProjectData(
+async function gatherVaultData(
     vaultRoot: string,
-    projectName: string,
     targetDate: string
 ): Promise<DailyItem[]> {
     const items: DailyItem[] = [];
-    const projectPath = path.join(vaultRoot, 'projects', projectName);
 
     // Gather tasks
-    const todosPath = path.join(projectPath, 'todos');
+    const todosPath = path.join(vaultRoot, 'todos');
     try {
         const files = await fs.readdir(todosPath);
         for (const file of files) {
@@ -44,11 +41,9 @@ async function gatherProjectData(
             const fileContent = await fs.readFile(filepath, 'utf-8');
             const { data, content } = matter(fileContent);
 
-            // Include if not completed and (has no due date or due date is today or earlier)
             if (!data.completed && (!data.dueDate || data.dueDate <= targetDate)) {
                 items.push({
                     type: 'task',
-                    project: projectName,
                     title: data.title || path.basename(file, '.md'),
                     content,
                     metadata: {
@@ -60,11 +55,10 @@ async function gatherProjectData(
         }
     } catch (err) {
         debug('daily', err);
-        // No todos
     }
 
     // Gather events for target date
-    const eventsPath = path.join(projectPath, 'events');
+    const eventsPath = path.join(vaultRoot, 'events');
     try {
         const files = await fs.readdir(eventsPath);
         for (const file of files) {
@@ -77,7 +71,6 @@ async function gatherProjectData(
             if (data.date === targetDate) {
                 items.push({
                     type: 'event',
-                    project: projectName,
                     title: data.title || path.basename(file, '.md'),
                     content,
                     metadata: {
@@ -91,11 +84,10 @@ async function gatherProjectData(
         }
     } catch (err) {
         debug('daily', err);
-        // No events
     }
 
     // Gather active research
-    const researchPath = path.join(projectPath, 'research');
+    const researchPath = path.join(vaultRoot, 'research');
     try {
         const files = await fs.readdir(researchPath);
         for (const file of files) {
@@ -108,7 +100,6 @@ async function gatherProjectData(
             if (data.status === 'in-progress') {
                 items.push({
                     type: 'research',
-                    project: projectName,
                     title: data.title || path.basename(file, '.md'),
                     content,
                     metadata: {
@@ -119,11 +110,10 @@ async function gatherProjectData(
         }
     } catch (err) {
         debug('daily', err);
-        // No research
     }
 
     // Gather recent notes (created or updated today)
-    const notesPath = path.join(projectPath, 'notes');
+    const notesPath = path.join(vaultRoot, 'notes');
     try {
         const files = await fs.readdir(notesPath);
         for (const file of files) {
@@ -139,7 +129,6 @@ async function gatherProjectData(
             if (created === targetDate || updated === targetDate) {
                 items.push({
                     type: 'note',
-                    project: projectName,
                     title: data.title || path.basename(file, '.md'),
                     content,
                     metadata: {
@@ -151,74 +140,6 @@ async function gatherProjectData(
         }
     } catch (err) {
         debug('daily', err);
-        // No notes
-    }
-
-    return items;
-}
-
-async function gatherGlobalData(vaultRoot: string, targetDate: string): Promise<DailyItem[]> {
-    const items: DailyItem[] = [];
-    const globalPath = path.join(vaultRoot, 'global');
-
-    // Gather global todos
-    const todosPath = path.join(globalPath, 'todos');
-    try {
-        const files = await fs.readdir(todosPath);
-        for (const file of files) {
-            if (!file.endsWith('.md') || file.startsWith('.')) continue;
-
-            const filepath = path.join(todosPath, file);
-            const fileContent = await fs.readFile(filepath, 'utf-8');
-            const { data, content } = matter(fileContent);
-
-            if (!data.completed && (!data.dueDate || data.dueDate <= targetDate)) {
-                items.push({
-                    type: 'task',
-                    project: 'global',
-                    title: data.title || path.basename(file, '.md'),
-                    content,
-                    metadata: {
-                        priority: data.priority,
-                        dueDate: data.dueDate,
-                    },
-                });
-            }
-        }
-    } catch (err) {
-        debug('daily', err);
-        // No global todos
-    }
-
-    // Gather global schedule
-    const schedulePath = path.join(globalPath, 'schedule');
-    try {
-        const files = await fs.readdir(schedulePath);
-        for (const file of files) {
-            if (!file.endsWith('.md') || file.startsWith('.')) continue;
-
-            const filepath = path.join(schedulePath, file);
-            const fileContent = await fs.readFile(filepath, 'utf-8');
-            const { data, content } = matter(fileContent);
-
-            if (data.date === targetDate) {
-                items.push({
-                    type: 'event',
-                    project: 'global',
-                    title: data.title || path.basename(file, '.md'),
-                    content,
-                    metadata: {
-                        date: data.date,
-                        time: data.time,
-                        duration: data.duration,
-                        location: data.location,
-                    },
-                });
-            }
-        }
-    } catch (err) {
-        debug('daily', err);
-        // No schedule
     }
 
     return items;
@@ -258,7 +179,7 @@ async function generateDailySummary(
     if (events.length > 0) {
         prompt += `## Schedule\n`;
         for (const e of events) {
-            prompt += `- ${e.metadata?.time || 'TBD'}: ${e.title}${e.metadata?.location ? ` @ ${e.metadata.location}` : ''} [${e.project}]\n`;
+            prompt += `- ${e.metadata?.time || 'TBD'}: ${e.title}${e.metadata?.location ? ` @ ${e.metadata.location}` : ''}\n`;
         }
         prompt += '\n';
     }
@@ -267,7 +188,7 @@ async function generateDailySummary(
         prompt += `## Tasks\n`;
         for (const t of tasks) {
             const priorityEmoji = { high: '🔴', medium: '🟡', low: '🟢' };
-            prompt += `- ${priorityEmoji[(t.metadata?.priority as keyof typeof priorityEmoji) || 'medium']} ${t.title} [${t.project}]${t.metadata?.dueDate ? ` (due: ${t.metadata.dueDate})` : ''}\n`;
+            prompt += `- ${priorityEmoji[(t.metadata?.priority as keyof typeof priorityEmoji) || 'medium']} ${t.title}${t.metadata?.dueDate ? ` (due: ${t.metadata.dueDate})` : ''}\n`;
         }
         prompt += '\n';
     }
@@ -275,7 +196,7 @@ async function generateDailySummary(
     if (research.length > 0) {
         prompt += `## Active Research\n`;
         for (const r of research) {
-            prompt += `- ${r.title} [${r.project}]\n`;
+            prompt += `- ${r.title}\n`;
         }
         prompt += '\n';
     }
@@ -283,7 +204,7 @@ async function generateDailySummary(
     if (notes.length > 0) {
         prompt += `## Recent Notes\n`;
         for (const n of notes) {
-            prompt += `- ${n.title} [${n.project}]\n`;
+            prompt += `- ${n.title}\n`;
         }
         prompt += '\n';
     }
@@ -325,35 +246,16 @@ async function saveDailyFile(vaultRoot: string, date: string, summary: string): 
 
 async function generateDailyForDate(
     date: Date,
-    input: { allProjects?: boolean; save?: boolean },
+    input: { save?: boolean },
     context: import('./types.js').ServiceToolExecutionContext
 ): Promise<ServiceToolResult> {
-    const { allProjects = true, save = true } = input;
+    const { save = true } = input;
     const targetDate = formatDate(date);
 
     context.log.info(`Generating daily summary for ${targetDate}`);
 
     const vaultRoot = await getVaultRoot();
-    const allItems: DailyItem[] = [];
-
-    // Gather global data
-    const globalItems = await gatherGlobalData(vaultRoot, targetDate);
-    allItems.push(...globalItems);
-
-    // Gather project data
-    if (allProjects) {
-        const projects = await listProjects();
-        for (const projectName of projects) {
-            const projectItems = await gatherProjectData(vaultRoot, projectName, targetDate);
-            allItems.push(...projectItems);
-        }
-    } else {
-        const activeProject = await getActiveProject();
-        if (activeProject) {
-            const projectItems = await gatherProjectData(vaultRoot, activeProject, targetDate);
-            allItems.push(...projectItems);
-        }
-    }
+    const allItems = await gatherVaultData(vaultRoot, targetDate);
 
     context.log.info(`Found ${allItems.length} items for ${targetDate}`);
 
@@ -385,18 +287,17 @@ async function generateDailyForDate(
 
 registerServiceTool({
     name: 'daily.today',
-    description: 'Review all projects and create today\'s summary markdown file',
+    description: 'Review all entities and create today\'s summary markdown file',
     type: 'ai',
     capability: 'summarize',
     inputSchema: {
         type: 'object',
         properties: {
-            allProjects: { type: 'boolean', description: 'Include all projects, not just active' },
             save: { type: 'boolean', description: 'Save the summary to daily folder' },
         },
     },
     execute: async (input, context): Promise<ServiceToolResult> => {
-        const opts = input as { allProjects?: boolean; save?: boolean };
+        const opts = input as { save?: boolean };
         return generateDailyForDate(new Date(), opts, context);
     },
 });
@@ -407,18 +308,17 @@ registerServiceTool({
 
 registerServiceTool({
     name: 'daily.tomorrow',
-    description: 'Review all projects and create tomorrow\'s summary markdown file',
+    description: 'Review all entities and create tomorrow\'s summary markdown file',
     type: 'ai',
     capability: 'summarize',
     inputSchema: {
         type: 'object',
         properties: {
-            allProjects: { type: 'boolean', description: 'Include all projects, not just active' },
             save: { type: 'boolean', description: 'Save the summary to daily folder' },
         },
     },
     execute: async (input, context): Promise<ServiceToolResult> => {
-        const opts = input as { allProjects?: boolean; save?: boolean };
+        const opts = input as { save?: boolean };
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         return generateDailyForDate(tomorrow, opts, context);

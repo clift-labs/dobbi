@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { getActiveProject, getVaultRoot } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 import { getContextString } from '../context/reader.js';
 import { getModelForCapability, createDobbiSystemPrompt } from '../llm/router.js';
 import { getResponse } from '../responses.js';
@@ -20,18 +20,15 @@ export const todayCommand = new Command('today')
             const today = new Date().toISOString().split('T')[0];
             const dayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
-            // Get active project
-            const activeProject = await getActiveProject();
-
-            // Gather global todos
-            const globalTodosPath = path.join(vaultRoot, 'global', 'todos');
-            let globalTodos = '';
+            // Gather todos
+            const todosPath = path.join(vaultRoot, 'todos');
+            let allTodos = '';
             try {
-                const files = await fs.readdir(globalTodosPath);
+                const files = await fs.readdir(todosPath);
                 for (const file of files) {
                     if (file.endsWith('.md') && !file.startsWith('.')) {
-                        const content = await fs.readFile(path.join(globalTodosPath, file), 'utf-8');
-                        globalTodos += content + '\n\n';
+                        const content = await fs.readFile(path.join(todosPath, file), 'utf-8');
+                        allTodos += content + '\n\n';
                     }
                 }
             } catch (err) {
@@ -39,38 +36,20 @@ export const todayCommand = new Command('today')
                 // No todos folder or empty
             }
 
-            // Gather schedule
-            const schedulePath = path.join(vaultRoot, 'global', 'schedule');
+            // Gather events
+            const eventsPath = path.join(vaultRoot, 'events');
             let schedule = '';
             try {
-                const files = await fs.readdir(schedulePath);
+                const files = await fs.readdir(eventsPath);
                 for (const file of files) {
                     if (file.endsWith('.md') && !file.startsWith('.')) {
-                        const content = await fs.readFile(path.join(schedulePath, file), 'utf-8');
+                        const content = await fs.readFile(path.join(eventsPath, file), 'utf-8');
                         schedule += content + '\n\n';
                     }
                 }
             } catch (err) {
                 debug('today', err);
-                // No schedule folder or empty
-            }
-
-            // Gather project todos if active
-            let projectTodos = '';
-            if (activeProject) {
-                const projectTodosPath = path.join(vaultRoot, 'projects', activeProject, 'todos');
-                try {
-                    const files = await fs.readdir(projectTodosPath);
-                    for (const file of files) {
-                        if (file.endsWith('.md') && !file.startsWith('.')) {
-                            const content = await fs.readFile(path.join(projectTodosPath, file), 'utf-8');
-                            projectTodos += content + '\n\n';
-                        }
-                    }
-                } catch (err) {
-                    debug('today', err);
-                    // No project todos
-                }
+                // No events folder or empty
             }
 
             // Gather active todonts
@@ -87,13 +66,6 @@ export const todayCommand = new Command('today')
             // Display header
             console.log(chalk.bold.cyan(`\n📋 Today - ${dayName}, ${today}\n`));
 
-            // Display active project
-            if (activeProject) {
-                console.log(chalk.bold.yellow(`🎯 Active Project: ${activeProject}\n`));
-            } else {
-                console.log(chalk.gray('No active project set. Use `dobbi project switch <name>` to set one.\n'));
-            }
-
             // Try to use AI to summarize
             try {
                 const context = await getContextString(vaultRoot);
@@ -104,13 +76,11 @@ export const todayCommand = new Command('today')
 
 Today's Date: ${today}
 
-Global Todos:
-${globalTodos || '(No global todos)'}
+Todos:
+${allTodos || '(No todos)'}
 
 Schedule:
 ${schedule || '(No scheduled events)'}
-
-${activeProject ? `Project "${activeProject}" Todos:\n${projectTodos || '(No project todos)'}\n` : ''}
 
 ${todontSection ? `🚫 Things to AVOID today:\n${todontSection}` : ''}
 
@@ -126,17 +96,12 @@ Provide a prioritized summary of what the user should focus on today. If there a
                 console.log(response);
             } catch (error) {
                 // Fall back to simple display if AI not configured
-                console.log(chalk.bold('📝 Global Todos:'));
-                console.log(globalTodos || chalk.gray('  No todos yet.\n'));
+                console.log(chalk.bold('📝 Todos:'));
+                console.log(allTodos || chalk.gray('  No todos yet.\n'));
 
                 if (schedule) {
                     console.log(chalk.bold('📅 Schedule:'));
                     console.log(schedule);
-                }
-
-                if (projectTodos) {
-                    console.log(chalk.bold(`📁 ${activeProject} Todos:`));
-                    console.log(projectTodos);
                 }
 
                 if (activeTodonts.length > 0) {

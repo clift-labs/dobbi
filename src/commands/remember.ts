@@ -3,8 +3,8 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { requireProject, getVaultRoot } from '../state/manager.js';
-import { getProjectContext } from '../context/reader.js';
+import { getVaultRoot } from '../state/manager.js';
+import { getContextString } from '../context/reader.js';
 import { getModelForCapability, createDobbiSystemPrompt } from '../llm/router.js';
 import { appendToMarkdown } from '../markdown/parser.js';
 import { getResponse } from '../responses.js';
@@ -13,30 +13,19 @@ import { debug } from '../utils/debug.js';
 export const rememberCommand = new Command('remember')
     .description('Add something to context or notes')
     .argument('<text>', 'What to remember')
-    .option('-g, --global', 'Add to global context instead of project')
-    .action(async (text: string, options: { global?: boolean }) => {
+    .action(async (text: string) => {
         try {
             const vaultRoot = await getVaultRoot();
             const today = new Date().toISOString().split('T')[0];
 
-            let targetPath: string;
-
-            if (options.global) {
-                // Add to global .socks.md
-                targetPath = path.join(vaultRoot, 'global', '.socks.md');
-                console.log(chalk.gray('Adding to global context, sir.'));
-            } else {
-                // Require a project
-                const project = await requireProject();
-                targetPath = path.join(vaultRoot, 'projects', project, '.socks.md');
-                console.log(chalk.gray(`Adding to project "${project}", sir.`));
-            }
+            const targetPath = path.join(vaultRoot, '.socks.md');
+            console.log(chalk.gray('Adding to vault context, sir.'));
 
             const spinner = ora(getResponse('processing')).start();
 
             try {
                 // Try to use AI to format the note
-                const context = options.global ? '' : await getProjectContext(await requireProject());
+                const context = await getContextString(vaultRoot);
                 const llm = await getModelForCapability('format');
                 const systemPrompt = createDobbiSystemPrompt(context);
 

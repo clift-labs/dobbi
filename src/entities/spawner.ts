@@ -11,7 +11,7 @@ import path from 'path';
 import matter from 'gray-matter';
 import { generateEntityId, writeEntity, ensureEntityDir } from './entity.js';
 import { getEntityType, type SpawnerConfig, type EntityTypeConfig } from './entity-type-config.js';
-import { getVaultRoot, getActiveProject } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 import { getEntityIndex } from './entity-index.js';
 import { debug } from '../utils/debug.js';
 
@@ -181,8 +181,6 @@ export async function spawnDateSeries(
     startDate: Date,
     endDate: Date,
 ): Promise<SpawnResult> {
-    const project = await getActiveProject();
-    if (!project) throw new Error('No active project');
 
     const scheduling = spawnerConfig.scheduling;
     if (!scheduling) throw new Error('date-series spawner requires scheduling config');
@@ -242,7 +240,6 @@ export async function spawnDateSeries(
             title: childTitle,
             entityType: targetTypeConfig.name,
             created: new Date().toISOString(),
-            project,
             tags: [...(targetTypeConfig.defaultTags ?? []), 'recurring'],
             ...applyFieldMapping(spawnerConfig.fieldMapping, template, date),
         };
@@ -286,8 +283,6 @@ export async function spawnTemplate(
     spawnerConfig: SpawnerConfig,
     targetTypeConfig: EntityTypeConfig,
 ): Promise<SpawnResult> {
-    const project = await getActiveProject();
-    if (!project) throw new Error('No active project');
 
     const childrenField = spawnerConfig.childrenField ?? 'children';
     const children = template.meta[childrenField] as ChildSpec[] | undefined;
@@ -328,7 +323,6 @@ export async function spawnTemplate(
             title: child.title,
             entityType: targetTypeConfig.name,
             created: new Date().toISOString(),
-            project,
             tags: [...(targetTypeConfig.defaultTags ?? [])],
             ...(child.fields ?? {}),
         };

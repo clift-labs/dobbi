@@ -11,7 +11,6 @@ import os from 'os';
 import { syncCalendar } from '../../commands/cal.js';
 import { processInbox } from '../../commands/inbox.js';
 import { generateRecurrences } from '../../commands/recurrence.js';
-import { requireProject } from '../../state/manager.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIG
@@ -75,16 +74,14 @@ const JOB_DEFS: CronJobDef[] = [
     {
         name: 'inbox-import',
         async run() {
-            const project = await requireProject();
-            const result = await processInbox(project);
+            const result = await processInbox();
             return `${result.processed} processed, ${result.skipped} skipped`;
         },
     },
     {
         name: 'recurrence-generate',
         async run() {
-            const project = await requireProject();
-            const result = await generateRecurrences(project);
+            const result = await generateRecurrences();
             return `${result.created} created, ${result.skipped} skipped`;
         },
     },

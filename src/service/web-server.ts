@@ -11,7 +11,6 @@ import { listEntities, writeEntity, parseEntity, getEntityDir } from '../entitie
 import { feralChatHeadless } from '../commands/chat.js';
 import { getQueueManager } from './queue/manager.js';
 import { getEntityIndex } from '../entities/entity-index.js';
-import { getActiveProject, listProjects, setActiveProject } from '../state/manager.js';
 import { debug } from '../utils/debug.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -112,22 +111,6 @@ export class WebServer {
             const status = await this.getStatus();
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(status));
-            return;
-        }
-
-        if (req.method === 'GET' && url.pathname === '/api/projects') {
-            const projects = await this.getProjects();
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(projects));
-            return;
-        }
-
-        if (req.method === 'POST' && url.pathname === '/api/projects/active') {
-            const body = await this.readBody(req);
-            const { project } = JSON.parse(body);
-            await setActiveProject(project);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ active: project }));
             return;
         }
 
@@ -316,18 +299,10 @@ export class WebServer {
             // Index not built yet
         }
 
-        let activeProject: string | null = null;
-        try {
-            activeProject = await getActiveProject();
-        } catch {
-            // No vault
-        }
-
         return {
             uptime: Math.round(process.uptime()),
             queueSize,
             graph: { nodes: graphNodes, edges: graphEdges },
-            activeProject,
             memory: {
                 rss: Math.round(mem.rss / 1024 / 1024),
                 heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
@@ -354,18 +329,6 @@ export class WebServer {
         } catch (err) {
             return { ok: false, error: err instanceof Error ? err.message : String(err) };
         }
-    }
-
-    private async getProjects(): Promise<{ projects: string[]; active: string | null }> {
-        let projects: string[] = [];
-        let active: string | null = null;
-        try {
-            projects = await listProjects();
-            active = await getActiveProject();
-        } catch {
-            // No vault
-        }
-        return { projects, active };
     }
 
     private readBody(req: http.IncomingMessage): Promise<string> {

@@ -4,7 +4,7 @@ import inquirer from 'inquirer';
 import { promises as fs } from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
-import { requireProject, getVaultRoot } from '../state/manager.js';
+import { getVaultRoot } from '../state/manager.js';
 import { getEnrichedContext } from '../context/reader.js';
 import { getModelForCapability, createDobbiSystemPrompt } from '../llm/router.js';
 import { getResponse } from '../responses.js';
@@ -18,7 +18,6 @@ import { findEntityByTitle, trashEntity, generateEntityId } from '../entities/en
 interface TodoState {
     title: string;
     content: string;
-    project: string;
     priority: 'low' | 'medium' | 'high';
     dueDate?: string;
     filepath?: string;
@@ -26,11 +25,9 @@ interface TodoState {
     completed: boolean;
 }
 
-async function findExistingTodo(project: string, titleOrFilename: string): Promise<{ filepath: string; title: string; content: string; priority: string; dueDate?: string; completed: boolean } | null> {
+async function findExistingTodo(titleOrFilename: string): Promise<{ filepath: string; title: string; content: string; priority: string; dueDate?: string; completed: boolean } | null> {
     const found = await findEntityByTitle('task', titleOrFilename);
     if (!found) return null;
-    // Filter to current project
-    if (found.meta.project && found.meta.project !== project) return null;
     return {
         filepath: found.filepath,
         title: found.meta.title as string,
@@ -44,7 +41,7 @@ async function findExistingTodo(project: string, titleOrFilename: string): Promi
 async function breakdownTodo(state: TodoState): Promise<string> {
     console.log(chalk.gray('\n' + getResponse('todo_breakdown')));
 
-    const context = await getEnrichedContext(state.project, 'todos', state.content);
+    const context = await getEnrichedContext('todos', state.content);
     const llm = await getModelForCapability('reason');
     const systemPrompt = createDobbiSystemPrompt(context);
 
@@ -77,7 +74,7 @@ ${state.content || '(No details yet)'}`,
 async function clarifyTodo(state: TodoState): Promise<string> {
     console.log(chalk.gray('\n' + getResponse('processing')));
 
-    const context = await getEnrichedContext(state.project, 'todos', state.content);
+    const context = await getEnrichedContext('todos', state.content);
     const llm = await getModelForCapability('reason');
     const systemPrompt = createDobbiSystemPrompt(context);
 
@@ -112,7 +109,7 @@ ${state.content || '(No details yet)'}`,
 async function estimateTodo(state: TodoState): Promise<string> {
     console.log(chalk.gray('\n' + getResponse('thinking')));
 
-    const context = await getEnrichedContext(state.project, 'todos', state.content);
+    const context = await getEnrichedContext('todos', state.content);
     const llm = await getModelForCapability('reason');
     const systemPrompt = createDobbiSystemPrompt(context);
 
@@ -142,7 +139,7 @@ ${state.content || '(No details yet)'}`,
 async function modifyTodo(state: TodoState, feedback: string): Promise<string> {
     console.log(chalk.gray('\n' + getResponse('processing')));
 
-    const context = await getEnrichedContext(state.project, 'todos', state.content);
+    const context = await getEnrichedContext('todos', state.content);
     const llm = await getModelForCapability('reason');
     const systemPrompt = createDobbiSystemPrompt(context);
 
@@ -178,7 +175,7 @@ async function formatTodo(state: TodoState): Promise<string> {
     console.log(chalk.gray('\n' + getResponse('processing')));
 
     try {
-        const context = await getEnrichedContext(state.project, 'todos', state.content);
+        const context = await getEnrichedContext('todos', state.content);
         const llm = await getModelForCapability('format');
         const systemPrompt = createDobbiSystemPrompt(context);
 
@@ -219,7 +216,7 @@ ${state.content}`,
 
 async function saveTodo(state: TodoState): Promise<string> {
     const vaultRoot = await getVaultRoot();
-    const todosDir = path.join(vaultRoot, 'projects', state.project, 'todos');
+    const todosDir = path.join(vaultRoot, 'todos');
 
     // Ensure todos directory exists
     await fs.mkdir(todosDir, { recursive: true });
@@ -240,7 +237,6 @@ async function saveTodo(state: TodoState): Promise<string> {
 id: ${entityId}
 title: "${state.title}"
 created: ${today}
-project: ${state.project}
 priority: ${state.priority}
 ${state.dueDate ? `dueDate: ${state.dueDate}` : ''}
 completed: ${state.completed}
@@ -321,8 +317,7 @@ export const todoCommand = new Command('todo')
                     console.log(chalk.yellow('\n  Please specify which task to complete: todo done <title>\n'));
                     return;
                 }
-                const project = await requireProject();
-                const existing = await findExistingTodo(project, doneTitle);
+                const existing = await findExistingTodo(doneTitle);
                 if (!existing) {
                     console.log(chalk.red(`\n  ✗ Task "${doneTitle}" not found\n`));
                     return;
@@ -330,7 +325,6 @@ export const todoCommand = new Command('todo')
                 const doneState: TodoState = {
                     title: existing.title,
                     content: existing.content,
-                    project,
                     priority: existing.priority as 'low' | 'medium' | 'high',
                     dueDate: existing.dueDate,
                     filepath: existing.filepath,
@@ -351,8 +345,7 @@ export const todoCommand = new Command('todo')
                     console.log(chalk.yellow('\n  Please specify which task to remove: todo remove <title>\n'));
                     return;
                 }
-                const project = await requireProject();
-                const existing = await findExistingTodo(project, removeTitle);
+                const existing = await findExistingTodo(removeTitle);
                 if (!existing) {
                     console.log(chalk.red(`\n  ✗ Task "${removeTitle}" not found\n`));
                     return;
@@ -368,9 +361,6 @@ export const todoCommand = new Command('todo')
                 console.log(chalk.gray(`    ${trashPath}\n`));
                 return;
             }
-
-            // Require a project
-            const project = await requireProject();
 
             // Parse: first word = title, rest = inline description
             let title = words.length > 0 ? words[0] : undefined;
@@ -390,7 +380,7 @@ export const todoCommand = new Command('todo')
             }
 
             // Check if todo already exists
-            const existing = await findExistingTodo(project, title!);
+            const existing = await findExistingTodo(title!);
 
             let state: TodoState;
 
@@ -403,7 +393,6 @@ export const todoCommand = new Command('todo')
                     state = {
                         title: existing.title,
                         content: updatedContent,
-                        project,
                         priority: existing.priority as 'low' | 'medium' | 'high',
                         dueDate: existing.dueDate,
                         filepath: existing.filepath,
@@ -419,7 +408,6 @@ export const todoCommand = new Command('todo')
                 state = {
                     title: existing.title,
                     content: existing.content,
-                    project,
                     priority: existing.priority as 'low' | 'medium' | 'high',
                     dueDate: existing.dueDate,
                     filepath: existing.filepath,
@@ -431,7 +419,6 @@ export const todoCommand = new Command('todo')
                 state = {
                     title: title!,
                     content: inlineBody,
-                    project,
                     priority: 'medium',
                     dueDate: undefined,
                     isExisting: false,
@@ -479,14 +466,13 @@ export const todoCommand = new Command('todo')
                 state = {
                     title: title!,
                     content: content.trim(),
-                    project,
                     priority,
                     dueDate: dueDate || undefined,
                     isExisting: false,
                     completed: false,
                 };
 
-                console.log(chalk.green(`\n✓ Todo created for project "${project}"`));
+                console.log(chalk.green(`\n✓ Todo created`));
             }
 
             pushCrumb('todo');

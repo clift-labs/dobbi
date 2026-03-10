@@ -5,7 +5,6 @@ export const FrontmatterSchema = z.object({
     title: z.string(),
     created: z.string(),
     modified: z.string().optional(),
-    project: z.string().optional(),
     tags: z.array(z.string()).default([]),
     status: z.enum(['active', 'done', 'blocked', 'archived']).optional(),
 });
@@ -55,7 +54,6 @@ export type Config = z.infer<typeof ConfigSchema>;
 
 // State
 export const StateSchema = z.object({
-    activeProject: z.string().nullable(),
     lastUsed: z.string().optional(),
     userName: z.string().optional(),
     honorific: z.string().optional(),
@@ -67,7 +65,6 @@ export const StateSchema = z.object({
     cityWork: z.string().optional(),
     personalCalUrl: z.string().optional(),
     workCalUrl: z.string().optional(),
-    firstProject: z.string().optional(),
     interviewComplete: z.boolean().optional(),
 });
 

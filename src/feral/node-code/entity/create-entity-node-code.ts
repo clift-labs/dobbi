@@ -17,7 +17,6 @@ import {
     writeEntity,
     type EntityTypeName,
 } from '../../../entities/entity.js';
-import { getActiveProject } from '../../../state/manager.js';
 import { getEntityIndex } from '../../../entities/entity-index.js';
 
 /**
@@ -39,7 +38,7 @@ export class CreateEntityNodeCode extends AbstractNodeCode {
     ];
 
     constructor() {
-        super('create_entity', 'Create Entity', 'Creates a new entity in the active project.', NodeCodeCategory.DATA);
+        super('create_entity', 'Create Entity', 'Creates a new entity in the vault.', NodeCodeCategory.DATA);
     }
 
     async process(context: Context): Promise<Result> {
@@ -63,12 +62,6 @@ export class CreateEntityNodeCode extends AbstractNodeCode {
             return this.result(ResultStatus.ERROR, 'Missing title in context.');
         }
 
-        const project = await getActiveProject();
-        if (!project) {
-            context.set('error', 'No active project.');
-            return this.result(ResultStatus.ERROR, 'No active project.');
-        }
-
         // Check for duplicates
         const existing = await findEntityByTitle(entityType, title);
         if (existing) {
@@ -80,7 +73,7 @@ export class CreateEntityNodeCode extends AbstractNodeCode {
         const tags = (context.get('tags') as string[]) ?? [];
 
         const dir = await ensureEntityDir(entityType);
-        const entityMeta = createEntityMeta(entityType, title, { tags, project });
+        const entityMeta = createEntityMeta(entityType, title, { tags });
         const id = entityMeta.id;
         const filepath = path.join(dir, `${id}.md`);
 

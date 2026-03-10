@@ -80,6 +80,12 @@ import { CreateRecurringTaskNodeCode } from './node-code/entity/create-recurring
 import { SearchEntitiesNodeCode } from './node-code/entity/search-entities-node-code.js';
 import { LinkEntitiesNodeCode } from './node-code/entity/link-entities-node-code.js';
 
+// PAMP node codes
+import { PampSendNodeCode } from './node-code/pamp/pamp-send-node-code.js';
+import { PampCheckInboxNodeCode } from './node-code/pamp/pamp-check-inbox-node-code.js';
+import { PampShareEntityNodeCode } from './node-code/pamp/pamp-share-entity-node-code.js';
+import { PampAwaitReplyNodeCode } from './node-code/pamp/pamp-await-reply-node-code.js';
+
 // Catalog sources
 import { SlackCatalogSource } from './catalog/slack-catalog-source.js';
 import { AgentCatalogSource } from './catalog/agent-catalog-source.js';
@@ -87,6 +93,7 @@ import { EntityCatalogSource } from './catalog/entity-catalog-source.js';
 import { SystemCatalogSource } from './catalog/system-catalog-source.js';
 import { OutputCatalogSource } from './catalog/output-catalog-source.js';
 import { IntrospectCatalogSource } from './catalog/introspect-catalog-source.js';
+import { PampCatalogSource } from './catalog/pamp-catalog-source.js';
 
 // System & output node codes
 import { CliCommandNodeCode } from './node-code/system/cli-command-node-code.js';
@@ -170,6 +177,11 @@ function getBuiltInNodeCodes(): NodeCode[] {
         // Input
         new PromptInputNodeCode(),
         new PromptSelectNodeCode(),
+        // PAMP
+        new PampSendNodeCode(),
+        new PampCheckInboxNodeCode(),
+        new PampShareEntityNodeCode(),
+        new PampAwaitReplyNodeCode(),
     ];
 }
 
@@ -217,6 +229,7 @@ export async function bootstrapFeral(
         new SystemCatalogSource(),
         new OutputCatalogSource(),
         new IntrospectCatalogSource(),
+        new PampCatalogSource(),
     ]);
 
     // 4. Load process definitions from ~/.dobbi/processes/

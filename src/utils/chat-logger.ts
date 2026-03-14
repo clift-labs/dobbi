@@ -1,16 +1,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Chat Session Logger — structured JSONL logs per chat session
 // ─────────────────────────────────────────────────────────────────────────────
+//
+// Each chat session gets its own file: {vault}/.dobbi/logs/<chatId>.log
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { createWriteStream, type WriteStream } from 'fs';
 import { promises as fs } from 'fs';
-import path from 'path';
 import crypto from 'crypto';
-import { getVaultRoot } from '../state/manager.js';
+import { getLogsDir } from '../paths.js';
+import path from 'path';
 
 export type ChatLogType =
     | 'start'
     | 'node_selection'
+    | 'process_match'
     | 'process_design'
     | 'process_result'
     | 'completion_check'
@@ -27,6 +31,7 @@ export function generateChatId(): string {
 export class ChatLogger {
     private stream: WriteStream | null = null;
     private initPromise: Promise<void> | null = null;
+    private initFailed = false;
     private _chatId: string;
 
     constructor(chatId: string) {
@@ -41,11 +46,18 @@ export class ChatLogger {
      * Append a structured log entry. Lazily creates the log directory and file.
      */
     async log(type: ChatLogType, data: Record<string, unknown>): Promise<void> {
+        if (this.initFailed) return;
+
         if (!this.stream) {
             if (!this.initPromise) {
                 this.initPromise = this.init();
             }
-            await this.initPromise;
+            try {
+                await this.initPromise;
+            } catch {
+                this.initFailed = true;
+                return;
+            }
         }
 
         const line = JSON.stringify({
@@ -68,10 +80,9 @@ export class ChatLogger {
     }
 
     private async init(): Promise<void> {
-        const vaultRoot = await getVaultRoot();
-        const logsDir = path.join(vaultRoot, 'logs');
+        const logsDir = await getLogsDir();
         await fs.mkdir(logsDir, { recursive: true });
-        const logFile = path.join(logsDir, `${this._chatId}.jsonl`);
+        const logFile = path.join(logsDir, `${this._chatId}.log`);
         this.stream = createWriteStream(logFile, { flags: 'a' });
     }
 }

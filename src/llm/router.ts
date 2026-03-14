@@ -27,6 +27,17 @@ export async function getModelForCapability(capability: LLMCapability): Promise<
 }
 
 /**
+ * Get embeddings for an array of texts using the configured `embed` capability provider.
+ */
+export async function getEmbeddings(texts: string[], dimensions = 256): Promise<number[][]> {
+    const provider = await getModelForCapability('embed');
+    if (!provider.embed) {
+        throw new Error('The configured embed provider does not support embeddings, sir.');
+    }
+    return provider.embed(texts, { dimensions });
+}
+
+/**
  * Creates a system prompt with Dobbi's identity, capabilities, and context.
  */
 export function createDobbiSystemPrompt(context: string): string {

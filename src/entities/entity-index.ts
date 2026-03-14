@@ -24,6 +24,13 @@ export interface IndexNode {
     type: EntityTypeName;
     title: string;
     filepath: string;
+    tags: string[];          // cached from frontmatter
+    summary: string;         // cached from frontmatter (LLM-generated)
+}
+
+export interface IndexSearchResult {
+    node: IndexNode;
+    score: number;
 }
 
 export interface IndexEdge {
@@ -105,6 +112,8 @@ export class EntityIndex {
                             type: entityType,
                             title: (meta.title as string) || id,
                             filepath,
+                            tags: Array.isArray(meta.tags) ? (meta.tags as string[]) : [],
+                            summary: (meta.summary as string) ?? '',
                         });
                     } catch (err) {
                         debug('index', `Failed to parse ${filepath}: ${err}`);
@@ -207,11 +216,11 @@ export class EntityIndex {
      * Add or update a single node and re-scan its content for edges.
      * Avoids a full rebuild when a single entity is created or modified.
      */
-    async addOrUpdate(type: EntityTypeName, id: string, title: string, filepath: string): Promise<void> {
+    async addOrUpdate(type: EntityTypeName, id: string, title: string, filepath: string, tags?: string[], summary?: string): Promise<void> {
         const key = EntityIndex.key(type, id);
 
         // Upsert node
-        this.nodes.set(key, { id, type, title, filepath });
+        this.nodes.set(key, { id, type, title, filepath, tags: tags ?? [], summary: summary ?? '' });
 
         // Remove old outbound edges from this node
         this.edges = this.edges.filter(e => e.source !== key);
@@ -260,6 +269,99 @@ export class EntityIndex {
         this.nodes.delete(key);
         this.edges = this.edges.filter(e => e.source !== key && e.target !== key);
         debug('index', `Index removed: ${type}:${id} (${this.nodes.size} nodes, ${this.edges.length} edges)`);
+    }
+
+    // ── Search ──────────────────────────────────────────────────────────
+
+    /**
+     * Search nodes by query against title, tags, and summary.
+     * Tokenizes query; scoring: title=3, tag=2, summary=1 per token.
+     * All tokens must match at least one field.
+     */
+    search(query: string, entityType?: EntityTypeName): IndexSearchResult[] {
+        const rawTokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+
+        // Separate tag:value tokens from regular search tokens
+        const tagTokens: string[] = [];
+        const searchTokens: string[] = [];
+        for (const token of rawTokens) {
+            if (token.startsWith('tag:') || token.startsWith('tags:')) {
+                const tagValue = token.slice(token.indexOf(':') + 1);
+                if (tagValue) tagTokens.push(tagValue);
+            } else {
+                searchTokens.push(token);
+            }
+        }
+
+        if (searchTokens.length === 0 && tagTokens.length === 0) return [];
+
+        const results: IndexSearchResult[] = [];
+
+        for (const node of this.nodes.values()) {
+            if (entityType && node.type !== entityType) continue;
+
+            const titleLower = node.title.toLowerCase();
+            const tagsLower = node.tags.map(t => t.toLowerCase());
+            const summaryLower = node.summary.toLowerCase();
+
+            // Pre-filter by tag tokens if present
+            if (tagTokens.length > 0) {
+                const hasMatchingTag = tagTokens.some(ft => tagsLower.includes(ft));
+                if (!hasMatchingTag) continue;
+            }
+
+            // If no search tokens, return all tag-matched nodes
+            if (searchTokens.length === 0) {
+                results.push({ node, score: 1 });
+                continue;
+            }
+
+            let score = 0;
+            let allMatched = true;
+
+            for (const token of searchTokens) {
+                let matched = false;
+                if (titleLower.includes(token)) { score += 3; matched = true; }
+                if (tagsLower.some(tag => tag.includes(token))) { score += 2; matched = true; }
+                if (summaryLower.includes(token)) { score += 1; matched = true; }
+                if (!matched) { allMatched = false; break; }
+            }
+
+            if (allMatched && score > 0) {
+                results.push({ node, score });
+            }
+        }
+
+        results.sort((a, b) => b.score - a.score);
+        return results;
+    }
+
+    /**
+     * Find a single node by exact or partial title match.
+     * Exact match on id or title (case-insensitive), fallback to partial.
+     */
+    findByTitle(entityType: EntityTypeName, titleOrId: string): IndexNode | null {
+        const needle = titleOrId.toLowerCase();
+        let partialMatch: IndexNode | null = null;
+
+        for (const node of this.nodes.values()) {
+            if (node.type !== entityType) continue;
+
+            // Exact match on id or title
+            if (node.id === titleOrId || node.title.toLowerCase() === needle) {
+                return node;
+            }
+
+            // Partial match
+            if (!partialMatch) {
+                const titleLower = node.title.toLowerCase();
+                if (titleLower.includes(needle) || needle.includes(titleLower)) {
+                    partialMatch = node;
+                }
+            }
+        }
+
+        return partialMatch;
     }
 
     // ── Queries ──────────────────────────────────────────────────────────

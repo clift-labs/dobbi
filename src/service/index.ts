@@ -13,6 +13,8 @@ import { getQueueManager } from './queue/manager.js';
 import { getQueueProcessor } from './queue/processor.js';
 import { SOCKET_PATH } from './daemon.js';
 import { getEntityIndex } from '../entities/entity-index.js';
+import { getEmbeddingIndex } from '../entities/embedding-index.js';
+import { debug } from '../utils/debug.js';
 import { getCronScheduler } from './cron/scheduler.js';
 import type { ServiceRequest, ServiceResponse, Task } from './protocol.js';
 
@@ -248,6 +250,16 @@ async function main(): Promise<void> {
         await index.build();
         const stats = index.getStats();
         console.log(`Entity index: ${stats.nodeCount} nodes, ${stats.edgeCount} edges`);
+
+        // Load and sync embedding index
+        try {
+            const embeddingIndex = getEmbeddingIndex();
+            await embeddingIndex.load();
+            const result = await embeddingIndex.sync(index);
+            console.log(`Embedding index: ${result.added} added, ${result.updated} updated, ${result.removed} removed`);
+        } catch (err) {
+            debug('embeddings', `Embedding index sync skipped: ${err}`);
+        }
     } catch (err) {
         console.error('Failed to build entity index:', err);
     }

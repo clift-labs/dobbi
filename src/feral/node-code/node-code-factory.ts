@@ -34,6 +34,10 @@ export class NodeCodeFactory {
         return nc;
     }
 
+    register(nodeCode: NodeCode): void {
+        this.registry.set(nodeCode.key, nodeCode);
+    }
+
     getAllNodeCodes(): NodeCode[] {
         return Array.from(this.registry.values());
     }

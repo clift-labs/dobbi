@@ -18,6 +18,8 @@ import {
     type EntityTypeName,
 } from '../../../entities/entity.js';
 import { getEntityIndex } from '../../../entities/entity-index.js';
+import { getEmbeddingIndex } from '../../../entities/embedding-index.js';
+import { generateEntitySummary } from '../../../entities/entity-summary.js';
 
 /**
  * Custom result for duplicate detection.
@@ -29,6 +31,7 @@ export class CreateEntityNodeCode extends AbstractNodeCode {
         { key: 'entity_type', name: 'Entity Type', description: 'The entity type to create (any configured entity type, e.g. task, note, event, goal).', type: 'string' },
         { key: 'entity_title', name: 'Entity Title', description: 'Title for the entity. Supports {context_key} interpolation. Sets "title" in context.', type: 'string', isOptional: true },
         { key: 'entity_body', name: 'Entity Body', description: 'Body/content for the entity. Supports {context_key} interpolation. Sets "content" in context.', type: 'string', isOptional: true },
+        { key: 'tags', name: 'Tags', description: 'Comma-separated tags for the entity (e.g. "urgent,year-of-the-house"). Supports {context_key} interpolation.', type: 'string', isOptional: true },
         { key: 'extra_fields', name: 'Extra Fields', description: 'Comma-separated list of extra context keys to include in metadata (e.g. status,priority,dueDate).', type: 'string', default: '', isOptional: true },
     ];
     static readonly resultDescriptions: ResultDescription[] = [
@@ -54,6 +57,11 @@ export class CreateEntityNodeCode extends AbstractNodeCode {
         }
         if (configBody) {
             context.set('content', this.interpolate(configBody, context));
+        }
+        const configTags = this.getOptionalConfigValue('tags') as string | null;
+        if (configTags) {
+            const interpolated = this.interpolate(configTags, context);
+            context.set('tags', interpolated.split(',').map(t => t.trim()).filter(Boolean));
         }
 
         const title = context.get('title') as string;
@@ -91,13 +99,24 @@ export class CreateEntityNodeCode extends AbstractNodeCode {
 
         await writeEntity(filepath, meta, content);
 
+        // Generate and persist summary
+        const summary = await generateEntitySummary(entityType, title, content, meta);
+        meta.summary = summary;
+        await writeEntity(filepath, meta, content);
+
         context.set('filepath', filepath);
         context.set('entity', { filepath, content, ...meta });
 
         // Update entity index incrementally
         const index = getEntityIndex();
         if (index.isBuilt) {
-            await index.addOrUpdate(entityType, id, title, filepath);
+            await index.addOrUpdate(entityType, id, title, filepath, tags, summary);
+        }
+
+        // Update embedding index
+        const embeddingIndex = getEmbeddingIndex();
+        if (embeddingIndex.isLoaded) {
+            await embeddingIndex.upsert(`${entityType}:${id}`, { title, tags, summary: summary ?? '' });
         }
 
         return this.result(ResultStatus.OK, `Created ${entityType} "${title}" at ${filepath}.`);

@@ -99,7 +99,7 @@ export { Runner } from './runner/runner.js';
 // Catalog Config + Sources
 export { BuiltInCatalogSource } from './catalog/built-in-catalog-source.js';
 export { JsonCatalogSource } from './catalog/json-catalog-source.js';
-export { loadFeralCatalogConfig, saveFeralCatalogConfig, FERAL_CATALOG_PATH } from './catalog/feral-catalog-config.js';
+export { loadFeralCatalogConfig, saveFeralCatalogConfig } from './catalog/feral-catalog-config.js';
 export type { FeralCatalogConfigJson, CatalogNodeConfigJson } from './catalog/feral-catalog-config.js';
 export { SlackCatalogSource } from './catalog/slack-catalog-source.js';
 export { AgentCatalogSource } from './catalog/agent-catalog-source.js';

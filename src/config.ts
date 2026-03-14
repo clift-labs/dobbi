@@ -1,12 +1,7 @@
 import { promises as fs } from 'fs';
-import path from 'path';
-import os from 'os';
 import { SecretsSchema, ConfigSchema, LLM_CAPABILITIES, type Secrets, type Config, type LLMCapability, type CapabilityModelMapping } from './schemas/index.js';
 import { debug } from './utils/debug.js';
-
-const DOBBI_DIR = path.join(os.homedir(), '.dobbi');
-const SECRETS_PATH = path.join(DOBBI_DIR, 'secrets.json');
-const CONFIG_PATH = path.join(DOBBI_DIR, 'config.json');
+import { SYSTEM_DIR, SECRETS_PATH, getConfigPath, getVaultDobbiDir } from './paths.js';
 
 // Dobbi's built-in knowledge: the best model per provider per capability.
 // Users only need to add their API key — Dobbi picks the right model automatically.
@@ -60,13 +55,17 @@ const DEFAULT_SECRETS: Secrets = {
     providers: {},
 };
 
-async function ensureDobbiDir(): Promise<void> {
-    await fs.mkdir(DOBBI_DIR, { recursive: true });
+async function ensureSystemDir(): Promise<void> {
+    await fs.mkdir(SYSTEM_DIR, { recursive: true });
+}
+
+async function ensureVaultDobbiDir(): Promise<void> {
+    await fs.mkdir(await getVaultDobbiDir(), { recursive: true });
 }
 
 export async function loadSecrets(): Promise<Secrets> {
     try {
-        await ensureDobbiDir();
+        await ensureSystemDir();
         const data = await fs.readFile(SECRETS_PATH, 'utf-8');
         return SecretsSchema.parse(JSON.parse(data));
     } catch (err) {
@@ -76,14 +75,14 @@ export async function loadSecrets(): Promise<Secrets> {
 }
 
 export async function saveSecrets(secrets: Secrets): Promise<void> {
-    await ensureDobbiDir();
+    await ensureSystemDir();
     await fs.writeFile(SECRETS_PATH, JSON.stringify(secrets, null, 2));
 }
 
 export async function loadConfig(): Promise<Config> {
     try {
-        await ensureDobbiDir();
-        const data = await fs.readFile(CONFIG_PATH, 'utf-8');
+        const configPath = await getConfigPath();
+        const data = await fs.readFile(configPath, 'utf-8');
         return ConfigSchema.parse(JSON.parse(data));
     } catch (err) {
         debug('config', err);
@@ -92,8 +91,9 @@ export async function loadConfig(): Promise<Config> {
 }
 
 export async function saveConfig(config: Config): Promise<void> {
-    await ensureDobbiDir();
-    await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
+    await ensureVaultDobbiDir();
+    const configPath = await getConfigPath();
+    await fs.writeFile(configPath, JSON.stringify(config, null, 2));
 }
 
 export async function getApiKey(provider: string): Promise<string | null> {
@@ -157,4 +157,4 @@ export async function getConfiguredProviders(): Promise<string[]> {
     return Object.keys(secrets.providers);
 }
 
-export { DOBBI_DIR, SECRETS_PATH, CONFIG_PATH };
+export { SECRETS_PATH };

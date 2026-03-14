@@ -9,17 +9,16 @@ import { findVaultRoot } from '../state/manager.js';
 import { initEntityTypes, loadEntityTypes } from '../entities/entity-type-config.js';
 import { setApiKey, PROVIDER_MODELS, getConfiguredProviders } from '../config.js';
 import { startDaemon } from '../service/daemon.js';
-
-const CUPBOARD_DIR = path.join(os.homedir(), '.dobbi');
+import { SYSTEM_DIR } from '../paths.js';
 
 export const initCommand = new Command('init')
     .description('Initialize a new dobbi vault in the current directory')
     .action(async () => {
         const cwd = process.cwd();
 
-        // Reject init inside the system cupboard
-        if (cwd === path.join(os.homedir(), '.dobbi')) {
-            console.log(chalk.red('~/.dobbi/ is reserved for Dobbi\'s system config, sir.'));
+        // Reject init inside the system cupboard or a .dobbi directory
+        if (cwd === path.join(os.homedir(), '.dobbi') || path.basename(cwd) === '.dobbi') {
+            console.log(chalk.red('.dobbi/ directories are reserved for Dobbi\'s config, sir.'));
             console.log(chalk.gray('Please run `dobbi init` from a different directory.'));
             return;
         }
@@ -86,10 +85,13 @@ This vault is Dobbi's memory. Content is stored as Markdown files with YAML fron
 `;
         await fs.writeFile(socksPath, rootSocks);
 
-        // Ensure ~/.dobbi/ cupboard exists for config & secrets
-        await fs.mkdir(CUPBOARD_DIR, { recursive: true });
+        // Ensure ~/.dobbi/ exists for secrets
+        await fs.mkdir(SYSTEM_DIR, { recursive: true });
 
-        // Seed entity-types.json in ~/.dobbi/
+        // Create vault-scoped .dobbi/ for config, logs, processes
+        await fs.mkdir(path.join(cwd, '.dobbi'), { recursive: true });
+
+        // Seed entity-types.json in vault/.dobbi/
         await initEntityTypes();
 
         // Create entity type directories directly in vault root
@@ -104,6 +106,7 @@ This vault is Dobbi's memory. Content is stored as Markdown files with YAML fron
 
         // Create .gitignore
         const gitignore = `.state.json
+.dobbi/
 .DS_Store
 `;
         try {

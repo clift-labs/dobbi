@@ -1,15 +1,11 @@
 import { promises as fs } from 'fs';
-import path from 'path';
 import { debug } from '../../utils/debug.js';
-import os from 'os';
+import { getQueueStatePath, getVaultDobbiDir } from '../../paths.js';
 import type { Task } from '../protocol.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // QUEUE PERSISTENCE
 // ─────────────────────────────────────────────────────────────────────────────
-
-const DOBBI_DIR = path.join(os.homedir(), '.dobbi');
-const QUEUE_STATE_FILE = path.join(DOBBI_DIR, 'queue-state.json');
 
 interface PersistedQueueState {
     queue: { task: Task; addedAt: string }[];
@@ -27,7 +23,9 @@ export async function saveQueueState(
     errorCount: number,
 ): Promise<void> {
     try {
-        await fs.mkdir(DOBBI_DIR, { recursive: true });
+        const dir = await getVaultDobbiDir();
+        await fs.mkdir(dir, { recursive: true });
+        const statePath = await getQueueStatePath();
         const state: PersistedQueueState = {
             queue: queue.map(e => ({
                 task: e.task,
@@ -37,7 +35,7 @@ export async function saveQueueState(
             errorCount,
             savedAt: new Date().toISOString(),
         };
-        await fs.writeFile(QUEUE_STATE_FILE, JSON.stringify(state, null, 2));
+        await fs.writeFile(statePath, JSON.stringify(state, null, 2));
     } catch (err) {
         console.debug('[dobbi:queue-persistence] Failed to save state:', (err as Error).message);
     }
@@ -48,7 +46,8 @@ export async function saveQueueState(
  */
 export async function loadQueueState(): Promise<PersistedQueueState | null> {
     try {
-        const data = await fs.readFile(QUEUE_STATE_FILE, 'utf-8');
+        const statePath = await getQueueStatePath();
+        const data = await fs.readFile(statePath, 'utf-8');
         return JSON.parse(data) as PersistedQueueState;
     } catch (err) {
         debug('queue-persistence', err);
@@ -61,7 +60,8 @@ export async function loadQueueState(): Promise<PersistedQueueState | null> {
  */
 export async function clearQueueState(): Promise<void> {
     try {
-        await fs.unlink(QUEUE_STATE_FILE);
+        const statePath = await getQueueStatePath();
+        await fs.unlink(statePath);
     } catch (err) {
         debug('queue-persistence', err);
     }

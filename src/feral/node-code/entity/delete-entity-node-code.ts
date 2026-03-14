@@ -11,12 +11,14 @@ import { AbstractNodeCode } from '../abstract-node-code.js';
 import { NodeCodeCategory } from '../node-code.js';
 import { findEntityByTitle, slugify, trashEntity, type EntityTypeName } from '../../../entities/entity.js';
 import { getEntityIndex } from '../../../entities/entity-index.js';
+import { getEmbeddingIndex } from '../../../entities/embedding-index.js';
 
 const NOT_FOUND = 'not_found';
 
 export class DeleteEntityNodeCode extends AbstractNodeCode {
     static readonly configDescriptions: ConfigurationDescription[] = [
         { key: 'entity_type', name: 'Entity Type', description: 'The entity type to delete (any configured entity type, e.g. task, note, event, goal).', type: 'string' },
+        { key: 'entity_title', name: 'Entity Title', description: 'Title of the entity to delete. Supports {context_key} interpolation.', type: 'string', isOptional: true },
     ];
     static readonly resultDescriptions: ResultDescription[] = [
         { status: ResultStatus.OK, description: 'Entity deleted successfully.' },
@@ -29,6 +31,12 @@ export class DeleteEntityNodeCode extends AbstractNodeCode {
 
     async process(context: Context): Promise<Result> {
         const entityType = this.getRequiredConfigValue('entity_type') as EntityTypeName;
+
+        // Read title from config (preferred) or context
+        const configTitle = this.getOptionalConfigValue('entity_title') as string | null;
+        if (configTitle) {
+            context.set('title', this.interpolate(configTitle, context));
+        }
 
         const title = context.get('title') as string;
         if (!title) {
@@ -51,6 +59,13 @@ export class DeleteEntityNodeCode extends AbstractNodeCode {
             index.remove(entityType, slug);
         }
 
+        // Update embedding index
+        const embeddingIndex = getEmbeddingIndex();
+        if (embeddingIndex.isLoaded) {
+            const id = found.meta.id as string;
+            embeddingIndex.remove(`${entityType}:${id}`);
+        }
+
         context.set('deleted', {
             filepath: found.filepath,
             title: found.meta.title,
@@ -58,5 +73,11 @@ export class DeleteEntityNodeCode extends AbstractNodeCode {
         });
 
         return this.result(ResultStatus.OK, `Deleted ${entityType} "${title}".`);
+    }
+
+    private interpolate(template: string, context: Context): string {
+        return template.replace(/\{(\w+)\}/g, (_, key: string) => {
+            return String(context.get(key) ?? '');
+        });
     }
 }

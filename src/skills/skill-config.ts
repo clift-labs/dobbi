@@ -2,11 +2,8 @@
 // MCP Skills — Configuration
 // ─────────────────────────────────────────────────────────────────────────────
 
-import path from 'path';
 import { promises as fsPromises } from 'fs';
-import { DOBBI_DIR } from '../config.js';
-
-const SKILLS_CONFIG_PATH = path.join(DOBBI_DIR, 'skills.json');
+import { getSkillsConfigPath, getVaultDobbiDir } from '../paths.js';
 
 export interface SkillEntry {
     id: string;
@@ -22,7 +19,8 @@ export interface SkillsConfig {
 
 export async function loadSkillsConfig(): Promise<SkillsConfig> {
     try {
-        const raw = await fsPromises.readFile(SKILLS_CONFIG_PATH, 'utf-8');
+        const configPath = await getSkillsConfigPath();
+        const raw = await fsPromises.readFile(configPath, 'utf-8');
         const parsed = JSON.parse(raw);
         return { skills: parsed.skills ?? [] };
     } catch {
@@ -31,6 +29,8 @@ export async function loadSkillsConfig(): Promise<SkillsConfig> {
 }
 
 export async function saveSkillsConfig(cfg: SkillsConfig): Promise<void> {
-    await fsPromises.mkdir(DOBBI_DIR, { recursive: true });
-    await fsPromises.writeFile(SKILLS_CONFIG_PATH, JSON.stringify(cfg, null, 2));
+    const dir = await getVaultDobbiDir();
+    await fsPromises.mkdir(dir, { recursive: true });
+    const configPath = await getSkillsConfigPath();
+    await fsPromises.writeFile(configPath, JSON.stringify(cfg, null, 2));
 }

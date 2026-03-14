@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { getApiKey } from '../../config.js';
-import type { LLMProvider, Message, ChatOptions } from '../types.js';
+import type { LLMProvider, Message, ChatOptions, EmbedOptions } from '../types.js';
 
 export class OpenAIProvider implements LLMProvider {
     name = 'openai';
@@ -56,6 +56,21 @@ export class OpenAIProvider implements LLMProvider {
         });
 
         return response.choices[0]?.message?.content || '';
+    }
+
+    async embed(texts: string[], options: EmbedOptions = {}): Promise<number[][]> {
+        const client = await this.getClient();
+
+        const response = await client.embeddings.create({
+            model: this.modelId,
+            input: texts,
+            ...(options.dimensions ? { dimensions: options.dimensions } : {}),
+        });
+
+        // Sort by index to maintain input order
+        return response.data
+            .sort((a, b) => a.index - b.index)
+            .map(item => item.embedding);
     }
 }
 

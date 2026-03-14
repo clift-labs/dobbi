@@ -3,13 +3,8 @@ import { getResponse } from '../responses.js';
 import { debug } from '../utils/debug.js';
 import { findVaultRoot } from '../state/manager.js';
 import path from 'path';
-import os from 'os';
 import { spawn, execSync } from 'child_process';
-
-const DOBBI_DIR = path.join(os.homedir(), '.dobbi');
-const PID_FILE = path.join(DOBBI_DIR, 'dobbi.pid');
-const SOCKET_PATH = path.join(DOBBI_DIR, 'dobbi.sock');
-const LOG_FILE = path.join(DOBBI_DIR, 'dobbi.log');
+import { SYSTEM_DIR, PID_FILE, SOCKET_PATH, getDaemonLogPath, getVaultDobbiDir } from '../paths.js';
 
 export interface DaemonStatus {
     running: boolean;
@@ -20,8 +15,10 @@ export interface DaemonStatus {
 /**
  * Ensures the .dobbi directory exists.
  */
-async function ensureDobbiDir(): Promise<void> {
-    await fs.mkdir(DOBBI_DIR, { recursive: true });
+async function ensureDirs(): Promise<void> {
+    await fs.mkdir(SYSTEM_DIR, { recursive: true });
+    const vaultDobbiDir = await getVaultDobbiDir();
+    await fs.mkdir(vaultDobbiDir, { recursive: true });
 }
 
 /**
@@ -42,7 +39,7 @@ export async function readPid(): Promise<number | null> {
  * Write the PID to the pid file.
  */
 async function writePid(pid: number): Promise<void> {
-    await ensureDobbiDir();
+    await ensureDirs();
     await fs.writeFile(PID_FILE, pid.toString());
 }
 
@@ -100,7 +97,7 @@ export async function startDaemon(): Promise<DaemonStatus> {
         return status;
     }
 
-    await ensureDobbiDir();
+    await ensureDirs();
 
     // Kill any stale process holding port 3737
     try {
@@ -132,7 +129,8 @@ export async function startDaemon(): Promise<DaemonStatus> {
     // DOBBI_SERVICE=1 triggers `service/index.ts` to boot the daemon.
     const entryScript = path.join(import.meta.dirname, '..', 'index.js');
 
-    const logStream = await fs.open(LOG_FILE, 'a');
+    const logFile = await getDaemonLogPath();
+    const logStream = await fs.open(logFile, 'a');
 
     // Pass the vault root to the child so it can find the vault
     // regardless of its working directory.
@@ -209,4 +207,4 @@ export async function stopDaemon(): Promise<DaemonStatus> {
     return { running: false, pid: null, socketPath: SOCKET_PATH };
 }
 
-export { SOCKET_PATH, PID_FILE, LOG_FILE, DOBBI_DIR };
+export { SOCKET_PATH, PID_FILE };

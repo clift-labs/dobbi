@@ -16,8 +16,9 @@ import { NodeCodeCategory } from '../node-code.js';
 import { loadState, findVaultRoot } from '../../../state/manager.js';
 import { getConfiguredProviders, getEffectiveConfig } from '../../../config.js';
 import { getDaemonStatus } from '../../../service/daemon.js';
+import { loadCronConfig } from '../../../service/cron/scheduler.js';
 
-const VALID_TARGETS = ['user_profile', 'providers', 'capabilities', 'service', 'vault'] as const;
+const VALID_TARGETS = ['user_profile', 'providers', 'capabilities', 'service', 'vault', 'cron_schedule'] as const;
 type IntrospectTarget = (typeof VALID_TARGETS)[number];
 
 export class IntrospectNodeCode extends AbstractNodeCode {
@@ -107,6 +108,11 @@ export class IntrospectNodeCode extends AbstractNodeCode {
                 return {
                     root,
                 };
+            }
+
+            case 'cron_schedule': {
+                const config = await loadCronConfig();
+                return config.jobs;
             }
         }
     }

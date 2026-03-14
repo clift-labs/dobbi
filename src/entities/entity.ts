@@ -9,6 +9,8 @@ import matter from 'gray-matter';
 import { debug } from '../utils/debug.js';
 import { getVaultRoot } from '../state/manager.js';
 import { getEntityType, loadEntityTypes } from './entity-type-config.js';
+import { getEntityIndex } from './entity-index.js';
+import { getEmbeddingIndex } from './embedding-index.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED TYPES
@@ -64,6 +66,7 @@ export interface EntityMeta {
     created: string;           // ISO 8601
     updated?: string;          // ISO 8601, set on every save
     tags: string[];
+    summary?: string;          // LLM-generated one-sentence summary (max 150 chars)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -285,6 +288,43 @@ export async function findEntityByTitle(
     entityType: EntityTypeName,
     titleOrFilename: string,
 ): Promise<{ filepath: string; meta: Record<string, unknown>; content: string } | null> {
+    // Fast path: use in-memory index if built
+    const index = getEntityIndex();
+    if (index.isBuilt) {
+        const node = index.findByTitle(entityType, titleOrFilename);
+        if (node) {
+            try {
+                const rawContent = await fs.readFile(node.filepath, 'utf-8');
+                const { meta, content } = parseEntity(node.filepath, rawContent);
+                return { filepath: node.filepath, meta, content };
+            } catch (err) {
+                debug('entities', `Index hit but file read failed: ${err}`);
+            }
+        }
+
+        // Semantic fallback: try embedding similarity search
+        const embeddingIndex = getEmbeddingIndex();
+        if (embeddingIndex.isLoaded) {
+            try {
+                const results = await embeddingIndex.search(titleOrFilename, 1, entityType);
+                if (results.length > 0) {
+                    const matchedNode = index.getNode(results[0].key);
+                    if (matchedNode) {
+                        debug('entities', `Semantic match for "${titleOrFilename}" → "${matchedNode.title}" (similarity: ${results[0].similarity.toFixed(3)})`);
+                        const rawContent = await fs.readFile(matchedNode.filepath, 'utf-8');
+                        const { meta, content } = parseEntity(matchedNode.filepath, rawContent);
+                        return { filepath: matchedNode.filepath, meta, content };
+                    }
+                }
+            } catch (err) {
+                debug('entities', `Semantic search failed: ${err}`);
+            }
+        }
+
+        return null;
+    }
+
+    // Fallback: filesystem scan
     let dir: string;
     try {
         dir = await getEntityDir(entityType);
@@ -344,6 +384,30 @@ export async function searchEntities(
     entityType?: EntityTypeName,
     options?: { tags?: string[] },
 ): Promise<{ filepath: string; meta: Record<string, unknown>; content: string; score: number }[]> {
+    // Fast path: use in-memory index if built
+    const index = getEntityIndex();
+    if (index.isBuilt) {
+        // Merge explicit tags into query as tag: tokens for the index search
+        const tagPrefix = (options?.tags ?? []).map(t => `tag:${t}`).join(' ');
+        const fullQuery = tagPrefix ? `${tagPrefix} ${query}` : query;
+
+        const indexResults = index.search(fullQuery, entityType);
+
+        // Read full content from disk for matched nodes
+        const results: { filepath: string; meta: Record<string, unknown>; content: string; score: number }[] = [];
+        for (const { node, score } of indexResults) {
+            try {
+                const rawContent = await fs.readFile(node.filepath, 'utf-8');
+                const { meta, content } = parseEntity(node.filepath, rawContent);
+                results.push({ filepath: node.filepath, meta, content, score });
+            } catch (err) {
+                debug('entities', `Index hit but file read failed for ${node.filepath}: ${err}`);
+            }
+        }
+        return results;
+    }
+
+    // Fallback: filesystem scan
     const rawTokens = query.toLowerCase().split(/\s+/).filter(Boolean);
 
     // Separate tag:value tokens from regular search tokens

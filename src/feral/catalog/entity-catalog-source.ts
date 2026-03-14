@@ -75,9 +75,11 @@ export class EntityCatalogSource implements CatalogSource {
 
     private nodesForType(cfg: EntityTypeConfig): CatalogNode[] {
         const nodes: CatalogNode[] = [];
-        const { name: type, plural, fields } = cfg;
+        const { name: type, plural, fields, description: typeDesc } = cfg;
 
         const fieldKeys = fields.map(f => f.key).join(',');
+        // Build a suffix like " (calendar events and appointments)" from the type description
+        const descSuffix = typeDesc ? ` — ${typeDesc.charAt(0).toLowerCase()}${typeDesc.slice(1)}` : '';
 
         // Standard CRUD
         nodes.push({
@@ -85,7 +87,7 @@ export class EntityCatalogSource implements CatalogSource {
             nodeCodeKey: 'list_entities',
             name: `List ${cap(plural)}`,
             group: 'entity',
-            description: `Lists all ${plural} in the active project.`,
+            description: `Lists all ${plural} in the active project${descSuffix}.`,
             configuration: { entity_type: type, context_path: 'entities' },
         });
 
@@ -94,7 +96,7 @@ export class EntityCatalogSource implements CatalogSource {
             nodeCodeKey: 'search_entities',
             name: `Search ${cap(plural)}`,
             group: 'entity',
-            description: `Full-text search across ${plural} by keyword. Searches titles, tags, and body content.`,
+            description: `Full-text search across ${plural} by keyword${descSuffix}. Searches titles, tags, and body content.`,
             configuration: { entity_type: type, context_path: 'entities' },
         });
 
@@ -103,7 +105,7 @@ export class EntityCatalogSource implements CatalogSource {
             nodeCodeKey: 'find_entity',
             name: `Find ${cap(type)}`,
             group: 'entity',
-            description: `Finds a ${type} by title. Sets "entity" in context.`,
+            description: `Finds a ${type} by title${descSuffix}. Sets "entity" in context.`,
             configuration: { entity_type: type, title_context_key: 'title', context_path: 'entity' },
         });
 
@@ -112,7 +114,7 @@ export class EntityCatalogSource implements CatalogSource {
             nodeCodeKey: 'create_entity',
             name: `Create ${cap(type)}`,
             group: 'entity',
-            description: `Creates a new ${type}.`,
+            description: `Creates a new ${type}${descSuffix}.${fields.length > 0 ? ` Fields: ${fields.map(f => f.key).join(', ')}.` : ''}`,
             configuration: fieldKeys
                 ? { entity_type: type, extra_fields: fieldKeys }
                 : { entity_type: type },
@@ -123,7 +125,7 @@ export class EntityCatalogSource implements CatalogSource {
             nodeCodeKey: 'update_entity',
             name: `Update ${cap(type)}`,
             group: 'entity',
-            description: `Updates an existing ${type} by title.`,
+            description: `Updates an existing ${type} by title${descSuffix}.`,
             configuration: fieldKeys
                 ? { entity_type: type, patch_fields: fieldKeys }
                 : { entity_type: type },
@@ -134,7 +136,7 @@ export class EntityCatalogSource implements CatalogSource {
             nodeCodeKey: 'delete_entity',
             name: `Delete ${cap(type)}`,
             group: 'entity',
-            description: `Deletes a ${type} by title.`,
+            description: `Deletes a ${type} by title${descSuffix}.`,
             configuration: { entity_type: type },
         });
 

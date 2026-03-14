@@ -14,6 +14,7 @@ interface IntrospectEntry {
     description: string;
     target: string;
     contextPath: string;
+    nodeCodeKey?: string;
 }
 
 const INTROSPECT_NODES: IntrospectEntry[] = [
@@ -52,18 +53,41 @@ const INTROSPECT_NODES: IntrospectEntry[] = [
         target: 'vault',
         contextPath: 'vault_info',
     },
+    {
+        key: 'get_cron_schedule',
+        name: 'Get Cron Schedule',
+        description: 'Shows all cron jobs with their enabled/disabled status and interval in minutes.',
+        target: 'cron_schedule',
+        contextPath: 'cron_schedule',
+    },
+    {
+        key: 'list_processes',
+        name: 'List Processes',
+        description: 'Lists all available reusable processes with their keys and descriptions.',
+        target: '',
+        contextPath: 'processes',
+        nodeCodeKey: 'list_processes',
+    },
+    {
+        key: 'list_catalog_nodes',
+        name: 'List Catalog Nodes',
+        description: 'Lists all available catalog nodes (capabilities) grouped by category.',
+        target: '',
+        contextPath: 'catalog_nodes',
+        nodeCodeKey: 'list_catalog_nodes',
+    },
 ];
 
 export class IntrospectCatalogSource {
     getCatalogNodes(): CatalogNode[] {
         return INTROSPECT_NODES.map(entry => ({
             key: entry.key,
-            nodeCodeKey: 'introspect',
+            nodeCodeKey: entry.nodeCodeKey ?? 'introspect',
             name: entry.name,
             group: 'introspection',
             description: entry.description,
             configuration: {
-                target: entry.target,
+                ...(entry.target ? { target: entry.target } : {}),
                 context_path: entry.contextPath,
             },
         }));

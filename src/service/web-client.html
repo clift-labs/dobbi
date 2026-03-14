@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dobbi</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧦</text></svg>">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -243,6 +244,70 @@
     color: var(--dim);
     padding: 4px 0;
     font-style: italic;
+  }
+
+  /* ── Scheduler panel ────────────────────────────────── */
+
+  .sched-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 12px;
+  }
+
+  .sched-item:last-child { border-bottom: none; }
+
+  .sched-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .sched-dot.on { background: var(--green); }
+  .sched-dot.off { background: var(--dim); opacity: 0.4; }
+
+  .sched-name {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sched-detail {
+    font-size: 10px;
+    color: var(--dim);
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .sched-error {
+    color: var(--red);
+  }
+
+  .sched-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .sched-btn {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--dim);
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .sched-btn:hover {
+    background: rgba(255,255,255,0.12);
+    color: var(--text);
   }
 
   /* ── Chat panel ──────────────────────────────────── */
@@ -554,6 +619,7 @@
   <div class="header">
     <h1>Dobbi</h1>
     <div class="header-stats" id="header-stats">
+      <div class="stat"><span class="stat-label">Vault</span><span class="stat-value" id="stat-vault">--</span></div>
       <div class="stat"><span class="stat-label">Queue</span><span class="stat-value" id="stat-queue">--</span></div>
       <div class="stat"><span class="stat-label">Graph</span><span class="stat-value" id="stat-graph">--</span></div>
       <div class="stat"><span class="stat-label">Mem</span><span class="stat-value" id="stat-mem">--</span></div>
@@ -574,6 +640,10 @@
       <div class="panel-section-title" style="margin-top: 16px;">3-Day Calendar</div>
       <div id="calendar-body">
         <div class="empty-state">Loading events…</div>
+      </div>
+      <div class="panel-section-title" style="margin-top: 16px;">Scheduler</div>
+      <div id="scheduler-body">
+        <div class="empty-state">Loading scheduler…</div>
       </div>
     </div>
   </div>
@@ -603,11 +673,13 @@
 (function() {
   const todayBody = document.getElementById('today-body');
   const calendarBody = document.getElementById('calendar-body');
+  const schedulerBody = document.getElementById('scheduler-body');
   const chatMessages = document.getElementById('chat-messages');
   const chatForm = document.getElementById('chat-form');
   const chatInput = document.getElementById('chat-input');
   const chatSend = document.getElementById('chat-send');
   const wsStatusEl = document.getElementById('ws-status');
+  const statVault = document.getElementById('stat-vault');
   const statQueue = document.getElementById('stat-queue');
   const statGraph = document.getElementById('stat-graph');
   const statMem = document.getElementById('stat-mem');
@@ -621,9 +693,23 @@
 
   async function fetchToday() {
     try {
-      const res = await fetch('/api/today');
-      const data = await res.json();
-      renderToday(data);
+      const res = await fetch('/api/entities/task');
+      const entities = await res.json();
+      const today = new Date().toISOString().split('T')[0];
+      const tasks = entities
+        .filter(e => e.meta.status !== 'done')
+        .filter(e => {
+          const due = e.meta.dueDate;
+          return !due || due <= today;
+        })
+        .map(e => ({
+          id: e.meta.id,
+          title: e.meta.title,
+          status: e.meta.status || 'open',
+          priority: e.meta.priority || 'medium',
+          dueDate: e.meta.dueDate || null,
+        }));
+      renderToday({ date: today, tasks });
     } catch {
       todayBody.innerHTML = '<div class="empty-state">Failed to load tasks.</div>';
     }
@@ -631,18 +717,68 @@
 
   async function fetchCalendar() {
     try {
-      const res = await fetch('/api/events?days=3');
-      const data = await res.json();
-      renderCalendar(data);
+      const res = await fetch('/api/entities/event');
+      const entities = await res.json();
+      const now = new Date();
+      const dates = {};
+      for (let i = 0; i < 3; i++) {
+        const d = new Date(now);
+        d.setDate(d.getDate() + i);
+        dates[d.toISOString().split('T')[0]] = [];
+      }
+      const dateKeys = Object.keys(dates);
+      const startDate = dateKeys[0];
+      const endDate = dateKeys[dateKeys.length - 1];
+      for (const e of entities) {
+        const eventDate = ((e.meta.startDate || '') + '').split('T')[0];
+        if (eventDate >= startDate && eventDate <= endDate && dates[eventDate]) {
+          dates[eventDate].push({
+            title: e.meta.title,
+            startDate: e.meta.startDate,
+            endDate: e.meta.endDate,
+            location: e.meta.location || null,
+          });
+        }
+      }
+      renderCalendar({ dates });
     } catch {
       calendarBody.innerHTML = '<div class="empty-state">Failed to load events.</div>';
     }
   }
 
+  async function fetchScheduler() {
+    try {
+      const res = await fetch('/api/scheduler');
+      const data = await res.json();
+      renderScheduler(data);
+    } catch {
+      schedulerBody.innerHTML = '<div class="empty-state">Failed to load scheduler.</div>';
+    }
+  }
+
+  window.schedToggle = async function(jobName) {
+    try {
+      const res = await fetch('/api/scheduler/' + encodeURIComponent(jobName) + '/toggle', { method: 'POST' });
+      const data = await res.json();
+      if (data.jobs) renderScheduler(data);
+      else await fetchScheduler();
+    } catch { await fetchScheduler(); }
+  };
+
+  window.schedRun = async function(jobName) {
+    try {
+      const res = await fetch('/api/scheduler/' + encodeURIComponent(jobName) + '/run', { method: 'POST' });
+      const data = await res.json();
+      if (data.jobs) renderScheduler(data);
+      else await fetchScheduler();
+    } catch { await fetchScheduler(); }
+  };
+
   async function fetchStatus() {
     try {
       const res = await fetch('/api/status');
       const data = await res.json();
+      statVault.textContent = data.vaultRoot || '--';
       statQueue.textContent = String(data.queueSize ?? 0);
       statGraph.textContent = (data.graph ? data.graph.nodes + 'n / ' + data.graph.edges + 'e' : '--');
       statMem.textContent = (data.memory ? data.memory.rss + ' MB' : '--');
@@ -699,7 +835,11 @@
         if (!id) return;
         item.style.opacity = '0.4';
         try {
-          const res = await fetch('/api/tasks/' + encodeURIComponent(id) + '/done', { method: 'PATCH' });
+          const res = await fetch('/api/entities/task/' + encodeURIComponent(id), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'done' }),
+          });
           if (res.ok) {
             item.remove();
             if (!todayBody.querySelector('.task-item')) {
@@ -745,6 +885,68 @@
         ${eventsHtml}
       </div>`;
     }).join('');
+  }
+
+  function renderScheduler(data) {
+    if (!data.jobs || data.jobs.length === 0) {
+      schedulerBody.innerHTML = '<div class="empty-state">No scheduler jobs configured.</div>';
+      return;
+    }
+
+    schedulerBody.innerHTML = data.jobs.map(j => {
+      const dot = j.enabled ? 'on' : 'off';
+      let detail;
+      if (j.running) {
+        detail = 'running…';
+      } else if (!j.enabled) {
+        detail = 'disabled';
+      } else if (j.lastRunAt) {
+        detail = timeAgo(j.lastRunAt);
+        if (j.lastError) {
+          detail += ' · <span class="sched-error">' + esc(j.lastError.slice(0, 40)) + '</span>';
+        } else if (j.lastResult) {
+          detail += ' · ' + esc(j.lastResult.slice(0, 40));
+        }
+      } else if (j.nextRunAt) {
+        detail = 'next ' + timeAgo(j.nextRunAt).replace(' ago', '');
+      } else {
+        detail = 'every ' + formatInterval(j.intervalMinutes);
+      }
+      const toggleLabel = j.enabled ? 'disable' : 'enable';
+      const runBtn = j.enabled
+        ? `<button class="sched-btn" onclick="schedRun('${esc(j.name)}')"${j.running ? ' disabled' : ''}>run</button>`
+        : '';
+      return `<div class="sched-item">
+        <span class="sched-dot ${dot}"></span>
+        <span class="sched-name">${esc(j.name)}</span>
+        <span class="sched-detail">${detail}</span>
+        <span class="sched-actions">
+          <button class="sched-btn" onclick="schedToggle('${esc(j.name)}')">${toggleLabel}</button>
+          ${runBtn}
+        </span>
+      </div>`;
+    }).join('');
+  }
+
+  function formatInterval(minutes) {
+    if (minutes < 60) return minutes + 'm';
+    if (minutes < 1440) return Math.floor(minutes / 60) + 'h';
+    return Math.floor(minutes / 1440) + 'd';
+  }
+
+  function timeAgo(isoString) {
+    try {
+      const diff = Date.now() - new Date(isoString).getTime();
+      if (diff < 0) return 'just now';
+      const secs = Math.floor(diff / 1000);
+      if (secs < 60) return secs + 's ago';
+      const mins = Math.floor(secs / 60);
+      if (mins < 60) return mins + 'm ago';
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return hrs + 'h ago';
+      const days = Math.floor(hrs / 24);
+      return days + 'd ago';
+    } catch { return 'unknown'; }
   }
 
   // ── WebSocket ──────────────────────────────────────────────
@@ -1066,10 +1268,12 @@
   fetchToday();
   fetchCalendar();
   fetchStatus();
+  fetchScheduler();
   connectWs();
 
-  // Poll status every 30s
+  // Poll status and scheduler every 30s
   setInterval(fetchStatus, 30000);
+  setInterval(fetchScheduler, 30000);
 })();
 </script>
 </body>

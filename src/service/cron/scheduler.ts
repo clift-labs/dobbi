@@ -6,18 +6,18 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { promises as fs } from 'fs';
-import path from 'path';
-import os from 'os';
 import { syncCalendar } from '../../commands/cal.js';
 import { processInbox } from '../../commands/inbox.js';
 import { generateRecurrences } from '../../commands/recurrence.js';
+import { evaluateProcessLifecycle } from './process-lifecycle.js';
+import { checkPampMail } from './pamp-checker.js';
+import { getEntityIndex } from '../../entities/entity-index.js';
+import { getEmbeddingIndex } from '../../entities/embedding-index.js';
+import { getCronConfigPath, getVaultDobbiDir } from '../../paths.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
-
-const DOBBI_DIR = path.join(os.homedir(), '.dobbi');
-const CRON_CONFIG_PATH = path.join(DOBBI_DIR, 'cron-config.json');
 
 export interface CronJobConfig {
     enabled: boolean;
@@ -33,12 +33,16 @@ const DEFAULT_CONFIG: CronConfig = {
         'cal-sync':            { enabled: false, intervalMinutes: 60 },
         'inbox-import':        { enabled: false, intervalMinutes: 30 },
         'recurrence-generate': { enabled: false, intervalMinutes: 1440 },
+        'process-lifecycle':   { enabled: false, intervalMinutes: 60 },
+        'pamp-check':          { enabled: false, intervalMinutes: 15 },
+        'embedding-sync':      { enabled: false, intervalMinutes: 1440 },
     },
 };
 
 export async function loadCronConfig(): Promise<CronConfig> {
     try {
-        const raw = await fs.readFile(CRON_CONFIG_PATH, 'utf-8');
+        const configPath = await getCronConfigPath();
+        const raw = await fs.readFile(configPath, 'utf-8');
         const parsed = JSON.parse(raw) as Partial<CronConfig>;
         // Merge with defaults so new jobs are always present
         return {
@@ -50,8 +54,10 @@ export async function loadCronConfig(): Promise<CronConfig> {
 }
 
 export async function saveCronConfig(config: CronConfig): Promise<void> {
-    await fs.mkdir(DOBBI_DIR, { recursive: true });
-    await fs.writeFile(CRON_CONFIG_PATH, JSON.stringify(config, null, 2));
+    const dir = await getVaultDobbiDir();
+    await fs.mkdir(dir, { recursive: true });
+    const configPath = await getCronConfigPath();
+    await fs.writeFile(configPath, JSON.stringify(config, null, 2));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,6 +89,31 @@ const JOB_DEFS: CronJobDef[] = [
         async run() {
             const result = await generateRecurrences();
             return `${result.created} created, ${result.skipped} skipped`;
+        },
+    },
+    {
+        name: 'process-lifecycle',
+        async run() {
+            return evaluateProcessLifecycle();
+        },
+    },
+    {
+        name: 'pamp-check',
+        async run() {
+            const result = await checkPampMail();
+            if (result.skipped) return 'skipped (PAMP not configured)';
+            return `${result.fetched} fetched, ${result.errors} errors`;
+        },
+    },
+    {
+        name: 'embedding-sync',
+        async run() {
+            const embeddingIndex = getEmbeddingIndex();
+            if (!embeddingIndex.isLoaded) return 'skipped (not loaded)';
+            const entityIndex = getEntityIndex();
+            if (!entityIndex.isBuilt) return 'skipped (entity index not built)';
+            const result = await embeddingIndex.sync(entityIndex);
+            return `${result.added} added, ${result.updated} updated, ${result.removed} removed`;
         },
     },
 ];

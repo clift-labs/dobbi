@@ -1,18 +1,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // ENTITY TYPE CONFIG
-// Loads entity type definitions from ~/.dobbi/entity-types.json.
+// Loads entity type definitions from {vault}/.dobbi/entity-types.json.
 // Falls back to built-in defaults if the file doesn't exist.
 // Users can add, modify, or extend entity types by editing the JSON file.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { promises as fs } from 'fs';
-import path from 'path';
-import os from 'os';
 import { DEFAULT_ENTITY_TYPES, BUILT_IN_TYPE_NAMES } from './entity-types-defaults.js';
 import { debug } from '../utils/debug.js';
-
-const DOBBI_DIR = path.join(os.homedir(), '.dobbi');
-const ENTITY_TYPES_PATH = path.join(DOBBI_DIR, 'entity-types.json');
+import { getEntityTypesPath, getVaultDobbiDir } from '../paths.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -93,7 +89,8 @@ export async function loadEntityTypes(): Promise<EntityTypeConfig[]> {
     if (_cache) return _cache;
 
     try {
-        const raw = await fs.readFile(ENTITY_TYPES_PATH, 'utf-8');
+        const typesPath = await getEntityTypesPath();
+        const raw = await fs.readFile(typesPath, 'utf-8');
         const parsed: EntityTypesFile = JSON.parse(raw);
         if (!Array.isArray(parsed.entityTypes)) {
             throw new Error('entity-types.json missing entityTypes array');
@@ -111,9 +108,11 @@ export async function loadEntityTypes(): Promise<EntityTypeConfig[]> {
  * Save entity type configs to the vault file.
  */
 export async function saveEntityTypes(types: EntityTypeConfig[]): Promise<void> {
-    await fs.mkdir(DOBBI_DIR, { recursive: true });
+    const dir = await getVaultDobbiDir();
+    await fs.mkdir(dir, { recursive: true });
+    const typesPath = await getEntityTypesPath();
     const file: EntityTypesFile = { version: 1, entityTypes: types };
-    await fs.writeFile(ENTITY_TYPES_PATH, JSON.stringify(file, null, 2));
+    await fs.writeFile(typesPath, JSON.stringify(file, null, 2));
     invalidateCache();
 }
 
@@ -123,11 +122,13 @@ export async function saveEntityTypes(types: EntityTypeConfig[]): Promise<void> 
  */
 export async function initEntityTypes(): Promise<void> {
     try {
-        await fs.access(ENTITY_TYPES_PATH);
+        const typesPath = await getEntityTypesPath();
+        await fs.access(typesPath);
         debug('entity-types', 'entity-types.json already exists — skipping init');
     } catch {
         await saveEntityTypes(DEFAULT_ENTITY_TYPES);
-        debug('entity-types', `Created ${ENTITY_TYPES_PATH}`);
+        const typesPath = await getEntityTypesPath();
+        debug('entity-types', `Created ${typesPath}`);
     }
 }
 
@@ -199,4 +200,4 @@ export async function removeEntityType(name: string): Promise<void> {
     await saveEntityTypes(filtered);
 }
 
-export { ENTITY_TYPES_PATH, BUILT_IN_TYPE_NAMES };
+export { BUILT_IN_TYPE_NAMES };

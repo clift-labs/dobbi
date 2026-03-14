@@ -8,7 +8,8 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import path from 'path';
 import { promises as fsPromises } from 'fs';
-import { loadConfig, saveConfig, DOBBI_DIR } from '../config.js';
+import { loadConfig, saveConfig } from '../config.js';
+import { getCalConfigPath, getVaultDobbiDir } from '../paths.js';
 import { getVaultRoot } from '../state/manager.js';
 import { parseIcsFeed } from '../utils/ics-parser.js';
 import {
@@ -25,8 +26,6 @@ import { getEntityIndex } from '../entities/entity-index.js';
 // CONFIG HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CAL_CONFIG_PATH = path.join(DOBBI_DIR, 'cal-config.json');
-
 export interface CalendarEntry {
     id: string;
     name: string;
@@ -40,7 +39,8 @@ export interface CalConfig {
 /** Load config, auto-migrating legacy single-URL format. */
 export async function loadCalConfig(): Promise<CalConfig> {
     try {
-        const raw = await fsPromises.readFile(CAL_CONFIG_PATH, 'utf-8');
+        const configPath = await getCalConfigPath();
+        const raw = await fsPromises.readFile(configPath, 'utf-8');
         const parsed = JSON.parse(raw);
 
         // Migrate legacy format: { calendarUrl: "..." } → { calendars: [...] }
@@ -59,8 +59,10 @@ export async function loadCalConfig(): Promise<CalConfig> {
 }
 
 export async function saveCalConfig(cfg: CalConfig): Promise<void> {
-    await fsPromises.mkdir(DOBBI_DIR, { recursive: true });
-    await fsPromises.writeFile(CAL_CONFIG_PATH, JSON.stringify(cfg, null, 2));
+    const dir = await getVaultDobbiDir();
+    await fsPromises.mkdir(dir, { recursive: true });
+    const configPath = await getCalConfigPath();
+    await fsPromises.writeFile(configPath, JSON.stringify(cfg, null, 2));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

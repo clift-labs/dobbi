@@ -11,6 +11,9 @@ import { listEntities, writeEntity, parseEntity, getEntityDir } from '../entitie
 import { feralChatHeadless } from '../commands/chat.js';
 import { getQueueManager } from './queue/manager.js';
 import { getEntityIndex } from '../entities/entity-index.js';
+import { getVaultRoot } from '../state/manager.js';
+import { getCronScheduler, loadCronConfig, saveCronConfig } from './cron/scheduler.js';
+import { handleApiRoute } from './api-router.js';
 import { debug } from '../utils/debug.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -92,6 +95,17 @@ export class WebServer {
             return;
         }
 
+        // ── REST API (entities, types, search, processes) ────────────
+        if (url.pathname.startsWith('/api/types') ||
+            url.pathname.startsWith('/api/entities') ||
+            url.pathname.startsWith('/api/search') ||
+            url.pathname.startsWith('/api/processes')) {
+            const handled = await handleApiRoute(req, res, url);
+            if (handled) return;
+        }
+
+        // ── Convenience endpoints (legacy) ───────────────────────────
+
         if (req.method === 'GET' && url.pathname === '/api/today') {
             const tasks = await this.getTodayTasks();
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -107,10 +121,53 @@ export class WebServer {
             return;
         }
 
+        if (req.method === 'GET' && url.pathname === '/api/scheduler') {
+            const status = getCronScheduler().getStatus();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(status));
+            return;
+        }
+
         if (req.method === 'GET' && url.pathname === '/api/status') {
             const status = await this.getStatus();
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(status));
+            return;
+        }
+
+        // POST /api/scheduler/:job/toggle — enable or disable a job
+        const toggleMatch = url.pathname.match(/^\/api\/scheduler\/([^/]+)\/toggle$/);
+        if (req.method === 'POST' && toggleMatch) {
+            const jobName = decodeURIComponent(toggleMatch[1]);
+            const config = await loadCronConfig();
+            const job = config.jobs[jobName];
+            if (!job) {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: `Unknown job: ${jobName}` }));
+                return;
+            }
+            job.enabled = !job.enabled;
+            await saveCronConfig(config);
+            await getCronScheduler().reload();
+            const status = getCronScheduler().getStatus();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(status));
+            return;
+        }
+
+        // POST /api/scheduler/:job/run — trigger a job immediately
+        const runMatch = url.pathname.match(/^\/api\/scheduler\/([^/]+)\/run$/);
+        if (req.method === 'POST' && runMatch) {
+            const jobName = decodeURIComponent(runMatch[1]);
+            try {
+                const summary = await getCronScheduler().runJob(jobName);
+                const status = getCronScheduler().getStatus();
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ summary, ...status }));
+            } catch (err) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+            }
             return;
         }
 
@@ -230,7 +287,12 @@ export class WebServer {
         try {
             const entities = await listEntities('task');
             const tasks = entities
-                .filter((e) => e.meta.status !== 'done')
+                .filter((e) => {
+                    if (e.meta.status === 'done') return false;
+                    const due = e.meta.dueDate as string | undefined;
+                    // Include if no due date, due today, or overdue
+                    return !due || due <= today;
+                })
                 .map((e) => ({
                     id: e.meta.id,
                     title: e.meta.title,
@@ -299,10 +361,18 @@ export class WebServer {
             // Index not built yet
         }
 
+        let vaultRoot = '';
+        try {
+            vaultRoot = await getVaultRoot();
+        } catch {
+            // No vault
+        }
+
         return {
             uptime: Math.round(process.uptime()),
             queueSize,
             graph: { nodes: graphNodes, edges: graphEdges },
+            vaultRoot,
             memory: {
                 rss: Math.round(mem.rss / 1024 / 1024),
                 heapUsed: Math.round(mem.heapUsed / 1024 / 1024),

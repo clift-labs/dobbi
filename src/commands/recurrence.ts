@@ -24,6 +24,12 @@ type RecurrenceTargetType = 'task' | 'event';
 
 const DAYS_OF_WEEK = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
+/** Map legacy 'todo' to the actual entity type name 'task'. */
+function normalizeTargetType(value: string): RecurrenceTargetType {
+    if (value === 'todo') return 'task';
+    return value as RecurrenceTargetType;
+}
+
 /**
  * Auto-register the "recurrence" entity type if it doesn't exist yet.
  */
@@ -138,7 +144,7 @@ async function loadAllRecurrences(): Promise<RecurrenceState[]> {
         const { data, content } = matter(raw);
         recurrences.push({
             title: data.title ?? file.replace('.md', ''),
-            recurrenceType: data.recurrenceType ?? 'todo',
+            recurrenceType: normalizeTargetType(data.recurrenceType ?? data.targetType ?? 'task'),
             cadence: data.cadence ?? 'monthly',
             cadenceDetails: data.cadenceDetails ?? {},
             priority: data.priority,
@@ -240,7 +246,7 @@ async function interactiveCreate(): Promise<void> {
         name: 'recurrenceType',
         message: 'What type of entity does this create?',
         choices: [
-            { name: 'Todo — recurring task', value: 'todo' },
+            { name: 'Task — recurring task', value: 'task' },
             { name: 'Event — recurring event with times', value: 'event' },
         ],
     }]);
@@ -283,7 +289,7 @@ async function interactiveCreate(): Promise<void> {
     }
 
     let priority: string | undefined;
-    if (recurrenceType === 'todo') {
+    if (recurrenceType === 'task') {
         const { p } = await inquirer.prompt([{
             type: 'list',
             name: 'p',

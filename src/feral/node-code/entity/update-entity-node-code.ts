@@ -10,6 +10,8 @@ import { AbstractNodeCode } from '../abstract-node-code.js';
 import { NodeCodeCategory } from '../node-code.js';
 import { findEntityByTitle, writeEntity, slugify, type EntityTypeName } from '../../../entities/entity.js';
 import { getEntityIndex } from '../../../entities/entity-index.js';
+import { getEmbeddingIndex } from '../../../entities/embedding-index.js';
+import { generateEntitySummary } from '../../../entities/entity-summary.js';
 
 const NOT_FOUND = 'not_found';
 
@@ -102,6 +104,11 @@ export class UpdateEntityNodeCode extends AbstractNodeCode {
 
         await writeEntity(found.filepath, found.meta, content);
 
+        // Regenerate summary with updated content
+        const summary = await generateEntitySummary(entityType, found.meta.title as string ?? title, content, found.meta);
+        found.meta.summary = summary;
+        await writeEntity(found.filepath, found.meta, content);
+
         context.set('entity', {
             filepath: found.filepath,
             content,
@@ -112,7 +119,16 @@ export class UpdateEntityNodeCode extends AbstractNodeCode {
         const index = getEntityIndex();
         if (index.isBuilt) {
             const slug = slugify(title);
-            await index.addOrUpdate(entityType, slug, title, found.filepath);
+            const updatedTags = Array.isArray(found.meta.tags) ? found.meta.tags as string[] : [];
+            await index.addOrUpdate(entityType, slug, title, found.filepath, updatedTags, summary);
+        }
+
+        // Update embedding index
+        const embeddingIndex = getEmbeddingIndex();
+        if (embeddingIndex.isLoaded) {
+            const id = found.meta.id as string;
+            const updatedTags = Array.isArray(found.meta.tags) ? found.meta.tags as string[] : [];
+            await embeddingIndex.upsert(`${entityType}:${id}`, { title, tags: updatedTags, summary: summary ?? '' });
         }
 
         return this.result(ResultStatus.OK, `Updated ${entityType} "${title}".`);

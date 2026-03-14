@@ -8,7 +8,10 @@ import chalk from 'chalk';
 import { loadCronConfig, saveCronConfig } from '../service/cron/scheduler.js';
 import { getServiceClient } from '../client/index.js';
 
-const VALID_JOBS = ['cal-sync', 'inbox-import', 'recurrence-generate'];
+const VALID_JOBS = [
+    'cal-sync', 'inbox-import', 'recurrence-generate',
+    'process-lifecycle', 'pamp-check', 'embedding-sync',
+];
 
 function assertValidJob(name: string): void {
     if (!VALID_JOBS.includes(name)) {

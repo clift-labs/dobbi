@@ -5,7 +5,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { bootstrapFeral } from '../feral/bootstrap.js';
-import { FERAL_CATALOG_PATH } from '../feral/catalog/feral-catalog-config.js';
+import { getFeralCatalogPath } from '../paths.js';
 import type { ConfigurationDescription, ResultDescription } from '../feral/configuration/configuration-description.js';
 import type { Process } from '../feral/process/process.js';
 import type { Edge } from '../feral/process/edge.js';
@@ -168,7 +168,7 @@ feralCommand
             }
 
             console.log(chalk.gray(`  ${allNodes.length} catalog node(s) from built-in + config`));
-            console.log(chalk.gray(`  Config: ${FERAL_CATALOG_PATH}`));
+            console.log(chalk.gray(`  Config: ${await getFeralCatalogPath()}`));
             console.log('');
         }
     });

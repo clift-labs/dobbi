@@ -1,0 +1,439 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// API ROUTER — REST endpoints for entity CRUD, types, search, and processes
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// All endpoints are JSON. Routes:
+//
+//   GET    /api/types                     — list all entity types with schemas
+//   GET    /api/types/:type               — get one entity type schema
+//
+//   GET    /api/entities/:type            — list entities (optional ?status=&tag=&due=)
+//   GET    /api/entities/:type/:id        — get single entity
+//   POST   /api/entities/:type            — create entity
+//   PATCH  /api/entities/:type/:id        — update entity fields
+//   DELETE /api/entities/:type/:id        — soft-delete (trash)
+//
+//   GET    /api/search?q=...&type=...     — full-text search
+//
+//   GET    /api/processes                 — list available Feral processes
+//   POST   /api/processes/:key/run        — execute a process with context
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type http from 'http';
+import path from 'path';
+import { promises as fs } from 'fs';
+import {
+    listEntities,
+    parseEntity,
+    writeEntity,
+    trashEntity,
+    searchEntities,
+    generateEntityId,
+    ensureEntityDir,
+    getEntityDir,
+} from '../entities/entity.js';
+import { loadEntityTypes, getEntityType } from '../entities/entity-type-config.js';
+import { getEntityIndex } from '../entities/entity-index.js';
+import { bootstrapFeral, type FeralRuntime } from '../feral/bootstrap.js';
+import { debug } from '../utils/debug.js';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function json(res: http.ServerResponse, status: number, data: unknown): void {
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(data));
+}
+
+function error(res: http.ServerResponse, status: number, message: string): void {
+    json(res, status, { error: message });
+}
+
+function readBody(req: http.IncomingMessage): Promise<string> {
+    return new Promise((resolve, reject) => {
+        let body = '';
+        req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+        req.on('end', () => resolve(body));
+        req.on('error', reject);
+    });
+}
+
+async function parseJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
+    const raw = await readBody(req);
+    if (!raw) return {};
+    return JSON.parse(raw);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ROUTER
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Lazy-cached Feral runtime for process execution. */
+let _feral: FeralRuntime | null = null;
+
+async function getFeral(): Promise<FeralRuntime> {
+    if (!_feral) {
+        _feral = await bootstrapFeral();
+    }
+    return _feral;
+}
+
+/**
+ * Try to handle an API request. Returns true if the route was matched,
+ * false if no route matched (caller should handle 404).
+ */
+export async function handleApiRoute(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    url: URL,
+): Promise<boolean> {
+    const method = req.method ?? 'GET';
+    const pathname = url.pathname;
+
+    // ── Entity Types ─────────────────────────────────────────────────
+
+    if (method === 'GET' && pathname === '/api/types') {
+        const types = await loadEntityTypes();
+        json(res, 200, types.map(t => ({
+            name: t.name,
+            plural: t.plural,
+            directory: t.directory,
+            description: t.description,
+            defaultTags: t.defaultTags,
+            fields: t.fields,
+            completionField: t.completionField,
+            completionValue: t.completionValue,
+        })));
+        return true;
+    }
+
+    const typeMatch = pathname.match(/^\/api\/types\/([^/]+)$/);
+    if (method === 'GET' && typeMatch) {
+        const typeName = decodeURIComponent(typeMatch[1]);
+        const typeConfig = await getEntityType(typeName);
+        if (!typeConfig) {
+            error(res, 404, `Unknown entity type: "${typeName}"`);
+            return true;
+        }
+        json(res, 200, {
+            name: typeConfig.name,
+            plural: typeConfig.plural,
+            directory: typeConfig.directory,
+            description: typeConfig.description,
+            defaultTags: typeConfig.defaultTags,
+            fields: typeConfig.fields,
+            completionField: typeConfig.completionField,
+            completionValue: typeConfig.completionValue,
+        });
+        return true;
+    }
+
+    // ── Search ───────────────────────────────────────────────────────
+
+    if (method === 'GET' && pathname === '/api/search') {
+        const q = url.searchParams.get('q') ?? '';
+        const type = url.searchParams.get('type') || undefined;
+        const tag = url.searchParams.get('tag') || undefined;
+
+        if (!q && !tag) {
+            error(res, 400, 'Query parameter "q" or "tag" is required');
+            return true;
+        }
+
+        const results = await searchEntities(q, type, tag ? { tags: [tag] } : undefined);
+        json(res, 200, results.map(r => ({
+            id: r.meta.id,
+            title: r.meta.title,
+            entityType: r.meta.entityType,
+            meta: r.meta,
+            content: r.content,
+            score: r.score,
+        })));
+        return true;
+    }
+
+    // ── Processes ────────────────────────────────────────────────────
+
+    if (method === 'GET' && pathname === '/api/processes') {
+        const feral = await getFeral();
+        const processes = feral.processFactory.getAllProcesses();
+        json(res, 200, processes.map(p => ({
+            key: p.key,
+            description: p.description,
+            hasTool: !!p.tool,
+        })));
+        return true;
+    }
+
+    const processRunMatch = pathname.match(/^\/api\/processes\/([^/]+)\/run$/);
+    if (method === 'POST' && processRunMatch) {
+        const processKey = decodeURIComponent(processRunMatch[1]);
+        const feral = await getFeral();
+
+        let contextValues: Record<string, unknown> = {};
+        try {
+            contextValues = await parseJsonBody(req);
+        } catch {
+            error(res, 400, 'Invalid JSON body');
+            return true;
+        }
+
+        try {
+            const ctx = await feral.runner.run(processKey, contextValues);
+            json(res, 200, { ok: true, result: ctx.getAll() });
+        } catch (err) {
+            error(res, 400, err instanceof Error ? err.message : String(err));
+        }
+        return true;
+    }
+
+    // ── Entity CRUD ──────────────────────────────────────────────────
+
+    // GET /api/entities/:type — list
+    const listMatch = pathname.match(/^\/api\/entities\/([^/]+)$/);
+    if (method === 'GET' && listMatch) {
+        const typeName = decodeURIComponent(listMatch[1]);
+        const typeConfig = await getEntityType(typeName);
+        if (!typeConfig) {
+            error(res, 404, `Unknown entity type: "${typeName}"`);
+            return true;
+        }
+
+        const entities = await listEntities(typeName);
+        let results = entities;
+
+        // Optional filters
+        const statusFilter = url.searchParams.get('status');
+        if (statusFilter) {
+            results = results.filter(e => e.meta.status === statusFilter);
+        }
+
+        const tagFilter = url.searchParams.get('tag');
+        if (tagFilter) {
+            results = results.filter(e => {
+                const tags = Array.isArray(e.meta.tags) ? e.meta.tags as string[] : [];
+                return tags.some(t => t.toLowerCase() === tagFilter.toLowerCase());
+            });
+        }
+
+        const dueFilter = url.searchParams.get('due');
+        if (dueFilter) {
+            // due=today, due=overdue, due=YYYY-MM-DD
+            const today = new Date().toISOString().split('T')[0];
+            if (dueFilter === 'today') {
+                results = results.filter(e => e.meta.dueDate === today);
+            } else if (dueFilter === 'overdue') {
+                results = results.filter(e => e.meta.dueDate && (e.meta.dueDate as string) < today);
+            } else {
+                results = results.filter(e => e.meta.dueDate === dueFilter);
+            }
+        }
+
+        json(res, 200, results.map(e => ({
+            id: e.meta.id,
+            title: e.meta.title,
+            entityType: e.meta.entityType,
+            meta: e.meta,
+            content: e.content,
+        })));
+        return true;
+    }
+
+    // POST /api/entities/:type — create
+    if (method === 'POST' && listMatch) {
+        const typeName = decodeURIComponent(listMatch[1]);
+        const typeConfig = await getEntityType(typeName);
+        if (!typeConfig) {
+            error(res, 404, `Unknown entity type: "${typeName}"`);
+            return true;
+        }
+
+        let body: Record<string, unknown>;
+        try {
+            body = await parseJsonBody(req);
+        } catch {
+            error(res, 400, 'Invalid JSON body');
+            return true;
+        }
+
+        if (!body.title) {
+            error(res, 400, 'Field "title" is required');
+            return true;
+        }
+
+        const id = generateEntityId(typeName);
+        const dir = await ensureEntityDir(typeName);
+        const filepath = path.join(dir, `${id}.md`);
+
+        const content = typeof body.content === 'string' ? body.content : '';
+        delete body.content;
+
+        const meta: Record<string, unknown> = {
+            id,
+            entityType: typeName,
+            created: new Date().toISOString(),
+            tags: [...(typeConfig.defaultTags ?? [])],
+            ...body,
+        };
+
+        // Apply field defaults
+        for (const fieldDef of typeConfig.fields) {
+            if (meta[fieldDef.key] === undefined && fieldDef.default !== undefined) {
+                meta[fieldDef.key] = fieldDef.default;
+            }
+        }
+
+        await writeEntity(filepath, meta, content);
+
+        // Update index
+        const index = getEntityIndex();
+        if (index.isBuilt) {
+            const tags = Array.isArray(meta.tags) ? meta.tags as string[] : [];
+            await index.addOrUpdate(typeName, id, String(meta.title), filepath, tags);
+        }
+
+        debug('api', `Created ${typeName}: ${meta.title}`);
+        json(res, 201, { id, title: meta.title, entityType: typeName, meta });
+        return true;
+    }
+
+    // GET/PATCH/DELETE /api/entities/:type/:id
+    const entityMatch = pathname.match(/^\/api\/entities\/([^/]+)\/([^/]+)$/);
+    if (entityMatch) {
+        const typeName = decodeURIComponent(entityMatch[1]);
+        const entityId = decodeURIComponent(entityMatch[2]);
+        const typeConfig = await getEntityType(typeName);
+        if (!typeConfig) {
+            error(res, 404, `Unknown entity type: "${typeName}"`);
+            return true;
+        }
+
+        // Find the entity file
+        const entity = await findEntityById(typeName, entityId);
+        if (!entity) {
+            error(res, 404, `Entity not found: ${typeName}/${entityId}`);
+            return true;
+        }
+
+        // GET — read single entity
+        if (method === 'GET') {
+            json(res, 200, {
+                id: entity.meta.id,
+                title: entity.meta.title,
+                entityType: entity.meta.entityType,
+                meta: entity.meta,
+                content: entity.content,
+            });
+            return true;
+        }
+
+        // PATCH — update fields
+        if (method === 'PATCH') {
+            let body: Record<string, unknown>;
+            try {
+                body = await parseJsonBody(req);
+            } catch {
+                error(res, 400, 'Invalid JSON body');
+                return true;
+            }
+
+            // Update content if provided
+            let content = entity.content;
+            if (typeof body.content === 'string') {
+                content = body.content;
+                delete body.content;
+            }
+
+            // Merge fields into meta (don't allow changing id or entityType)
+            const updatedMeta = { ...entity.meta };
+            for (const [key, value] of Object.entries(body)) {
+                if (key === 'id' || key === 'entityType') continue;
+                updatedMeta[key] = value;
+            }
+
+            await writeEntity(entity.filepath, updatedMeta, content);
+
+            // Update index
+            const index = getEntityIndex();
+            if (index.isBuilt) {
+                const tags = Array.isArray(updatedMeta.tags) ? updatedMeta.tags as string[] : [];
+                await index.addOrUpdate(
+                    typeName,
+                    String(updatedMeta.id),
+                    String(updatedMeta.title),
+                    entity.filepath,
+                    tags,
+                );
+            }
+
+            debug('api', `Updated ${typeName}: ${updatedMeta.title}`);
+            json(res, 200, {
+                id: updatedMeta.id,
+                title: updatedMeta.title,
+                entityType: typeName,
+                meta: updatedMeta,
+                content,
+            });
+            return true;
+        }
+
+        // DELETE — soft-delete (trash)
+        if (method === 'DELETE') {
+            await trashEntity(entity.filepath);
+
+            // Remove from index
+            const index = getEntityIndex();
+            if (index.isBuilt) {
+                index.remove(typeName, String(entity.meta.id));
+            }
+
+            debug('api', `Deleted ${typeName}: ${entity.meta.title}`);
+            json(res, 200, { ok: true, id: entity.meta.id, title: entity.meta.title });
+            return true;
+        }
+    }
+
+    // No route matched
+    return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENTITY LOOKUP
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function findEntityById(
+    typeName: string,
+    entityId: string,
+): Promise<{ filepath: string; meta: Record<string, unknown>; content: string } | null> {
+    // Try direct file path first (id is the filename stem)
+    try {
+        const dir = await getEntityDir(typeName);
+        const filepath = path.join(dir, `${entityId}.md`);
+        const raw = await fs.readFile(filepath, 'utf-8');
+        const { meta, content } = parseEntity(filepath, raw);
+        return { filepath, meta, content };
+    } catch {
+        // Not found by filename — scan for id field match
+    }
+
+    // Scan directory for matching id field
+    try {
+        const dir = await getEntityDir(typeName);
+        const files = await fs.readdir(dir);
+        for (const file of files) {
+            if (!file.endsWith('.md') || file.startsWith('.')) continue;
+            const filepath = path.join(dir, file);
+            const raw = await fs.readFile(filepath, 'utf-8');
+            const { meta, content } = parseEntity(filepath, raw);
+            if (meta.id === entityId) {
+                return { filepath, meta, content };
+            }
+        }
+    } catch {
+        // Directory doesn't exist
+    }
+
+    return null;
+}

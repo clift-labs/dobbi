@@ -7,7 +7,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import path from 'path';
-import os from 'os';
+import { findVaultRoot } from '../state/manager.js';
+import { getProcessesDir } from '../paths.js';
 
 import { NodeCodeFactory } from './node-code/node-code-factory.js';
 import type { NodeCode } from './node-code/node-code.js';
@@ -21,6 +22,7 @@ import { ProcessFactory } from './process/process-factory.js';
 import { Runner } from './runner/runner.js';
 import { FeralToolRegistry } from './feral-tool-registry.js';
 import type { ProcessSource } from './process/process-factory.js';
+import type { Process } from './process/process.js';
 
 // Built-in node codes
 import { StartNodeCode } from './node-code/flow/start-node-code.js';
@@ -100,6 +102,8 @@ import { McpCatalogSource } from './catalog/mcp-catalog-source.js';
 // System & output node codes
 import { CliCommandNodeCode } from './node-code/system/cli-command-node-code.js';
 import { IntrospectNodeCode } from './node-code/system/introspect-node-code.js';
+import { ListProcessesNodeCode } from './node-code/system/list-processes-node-code.js';
+import { ListCatalogNodesNodeCode } from './node-code/system/list-catalog-nodes-node-code.js';
 import { DobbiSpeakNodeCode } from './node-code/output/dobbi-speak-node-code.js';
 
 // Input node codes
@@ -200,6 +204,7 @@ export interface FeralRuntime {
     readonly processFactory: ProcessFactory;
     readonly runner: Runner;
     readonly toolRegistry: FeralToolRegistry;
+    readonly vaultProcesses: Process[];
 }
 
 /**
@@ -239,18 +244,28 @@ export async function bootstrapFeral(
         new McpCatalogSource(mcpTools),
     ]);
 
-    // 4. Load process definitions from ~/.dobbi/processes/
-    const processDir = path.join(os.homedir(), '.dobbi', 'processes');
+    // 4. Load process definitions from {vault}/.dobbi/processes/
+    const processDir = await getProcessesDir();
     const jsonProcessSource = new JsonProcessSource(processDir);
     await jsonProcessSource.load();
+
+    // 4b. Load vault-root process definitions from {vaultRoot}/processes/
+    const vaultRoot = await findVaultRoot();
+    const vaultProcessSource = new JsonProcessSource(path.join(vaultRoot ?? '', 'processes'));
+    await vaultProcessSource.load(); // silently handles missing dir
+    const vaultProcesses: Process[] = vaultProcessSource.getProcesses();
 
     // 5. Wire engine
     const eventDispatcher = new EventDispatcher();
     const engine = new ProcessEngine(eventDispatcher, catalog, nodeCodeFactory);
-    const processFactory = new ProcessFactory([jsonProcessSource, ...processSources]);
+    const processFactory = new ProcessFactory([jsonProcessSource, vaultProcessSource, ...processSources]);
     const runner = new Runner(processFactory, engine);
 
-    // 6. Tool registry — auto-generates ServiceTools from process metadata
+    // 6. Late-registered node codes (depend on processFactory / catalog)
+    nodeCodeFactory.register(new ListProcessesNodeCode(processFactory));
+    nodeCodeFactory.register(new ListCatalogNodesNodeCode(catalog));
+
+    // 7. Tool registry — auto-generates ServiceTools from process metadata
     const toolRegistry = new FeralToolRegistry(processFactory, runner);
 
     return {
@@ -261,5 +276,6 @@ export async function bootstrapFeral(
         processFactory,
         runner,
         toolRegistry,
+        vaultProcesses,
     };
 }

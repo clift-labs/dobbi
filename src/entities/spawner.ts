@@ -186,8 +186,10 @@ export async function spawnDateSeries(
     if (!scheduling) throw new Error('date-series spawner requires scheduling config');
 
     const cadence = template.meta[scheduling.cadenceField] as string ?? 'monthly';
-    const cadenceDetails = (template.meta[scheduling.cadenceDetailsField] as CadenceDetails) ?? {};
-    const blackoutWindows = (template.meta[scheduling.blackoutField] as BlackoutWindow[]) ?? [];
+    const rawDetails = template.meta[scheduling.cadenceDetailsField];
+    const cadenceDetails: CadenceDetails = (rawDetails && typeof rawDetails === 'object' && !Array.isArray(rawDetails)) ? rawDetails as CadenceDetails : {};
+    const rawBlackout = template.meta[scheduling.blackoutField];
+    const blackoutWindows: BlackoutWindow[] = Array.isArray(rawBlackout) ? rawBlackout : [];
 
     const occurrences = computeOccurrences(cadence, cadenceDetails, startDate, endDate);
 
@@ -259,7 +261,8 @@ export async function spawnDateSeries(
         const index = getEntityIndex();
         if (index.isBuilt) {
             const slug = path.basename(filepath, '.md');
-            await index.addOrUpdate(targetTypeConfig.name, slug, childTitle, filepath);
+            const tags = Array.isArray(childMeta.tags) ? childMeta.tags as string[] : [];
+            await index.addOrUpdate(targetTypeConfig.name, slug, childTitle, filepath, tags);
         }
 
         debug('spawner', `Created ${targetTypeConfig.name}: ${childTitle}`);
@@ -339,7 +342,8 @@ export async function spawnTemplate(
         const index = getEntityIndex();
         if (index.isBuilt) {
             const slug = path.basename(filepath, '.md');
-            await index.addOrUpdate(targetTypeConfig.name, slug, child.title, filepath);
+            const tags = Array.isArray(childMeta.tags) ? childMeta.tags as string[] : [];
+            await index.addOrUpdate(targetTypeConfig.name, slug, child.title, filepath, tags);
         }
 
         debug('spawner', `Spawned ${targetTypeConfig.name}: ${child.title}`);

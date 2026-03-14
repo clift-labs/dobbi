@@ -41,9 +41,9 @@ export const DEFAULT_ENTITY_TYPES: EntityTypeConfig[] = [
         description: 'Calendar events and appointments',
         defaultTags: ['event'],
         fields: [
-            { key: 'date',     type: 'date',     label: 'Date',      required: true },
-            { key: 'time',     type: 'string',   label: 'Time',      required: false },
-            { key: 'location', type: 'string',   label: 'Location',  required: false },
+            { key: 'startDate', type: 'date', label: 'Start Date/Time', required: true },
+            { key: 'endDate',   type: 'date', label: 'End Date/Time',   required: true },
+            { key: 'location',  type: 'string', label: 'Location',      required: false },
         ],
     },
     {

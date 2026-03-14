@@ -1,12 +1,16 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Feral Autonomous Chat
+// Feral Autonomous Chat — Two-Phase Pipeline
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// When the user types 3+ words that don't match a known command, Dobbi
-// "thinks for himself" — a 3-step LLM pipeline that:
-//   1. Selects catalog nodes relevant to the user's request
-//   2. Generates a Feral process JSON using those nodes
-//   3. Runs the process, then synthesizes a natural response
+// Phase 1 (Process Reuse): Present ALL known processes to the LLM and let it
+//   pick one if it clearly fits, or choose "custom" to build from scratch.
+//
+// Phase 2 (Custom Pipeline): Only runs when Phase 1 chose "custom" (or no
+//   processes exist). A multi-step LLM pipeline that:
+//     1. Selects catalog nodes relevant to the user's request
+//     2. Generates a Feral process JSON using those nodes
+//     3. Runs the process, checks completion, iterates if needed
+//     4. Synthesizes a natural response
 // ─────────────────────────────────────────────────────────────────────────────
 
 import chalk from 'chalk';
@@ -19,9 +23,13 @@ import type { Process } from '../feral/process/process.js';
 import { getModelForCapability, createDobbiSystemPrompt } from '../llm/router.js';
 import { debug } from '../utils/debug.js';
 import { ChatLogger, generateChatId } from '../utils/chat-logger.js';
+import { parseJsonResponse } from '../utils/json-parser.js';
+import { writeExecutionLog } from '../utils/execution-logger.js';
 import { loadEntityTypes } from '../entities/entity-type-config.js';
+import { listEntities } from '../entities/entity.js';
 import { getUserName } from '../state/manager.js';
 import { getVaultContext } from '../context/reader.js';
+import type { LLMProvider } from '../llm/types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // IN-MEMORY PROCESS SOURCE
@@ -232,10 +240,121 @@ async function _feralChatHeadlessInner(
 
     debug('chat', `Catalog has ${allNodes.length} nodes, sending ${catalogSummary.split('\n').length} to LLM`);
 
+    const llm = await getModelForCapability('reason');
+
+    // ── PHASE 1: Process reuse ─────────────────────────────────────────
+    // Show the LLM ALL known processes and let it pick one, or choose "custom".
+    const allProcesses = runtime.processFactory.getAllProcesses()
+        .filter(p => p.key !== 'chat.generated');
+
+    if (allProcesses.length > 0) {
+        status('Checking process library…');
+
+        const processSummary = allProcesses
+            .map(p => `- ${p.key}: ${p.description}`)
+            .join('\n');
+
+        const phase1Response = await llm.chat(
+            [{
+                role: 'user' as const,
+                content: `The user said: "${userInput}"
+
+AVAILABLE PROCESSES:
+${processSummary}
+
+You can either:
+1. REUSE an existing process if it clearly fits the request
+2. Choose CUSTOM to build a new process from scratch
+
+Return JSON:
+If reuse: { "action": "reuse", "process_key": "the.key", "context_overrides": {}, "reasoning": "why" }
+If custom: { "action": "custom", "reasoning": "why no existing process fits" }
+
+Return ONLY the JSON object, no markdown fences.`,
+            }],
+            {
+                systemPrompt: 'You are the process matcher for Dobbi. Determine if an existing reusable process can handle the user\'s request. Be conservative — only reuse if the process clearly fits. Better to build custom than force-fit.',
+                temperature: 0.2,
+            },
+        );
+
+        debug('chat', `Phase 1 response: ${phase1Response}`);
+
+        try {
+            const matchResult = parseJsonResponse(phase1Response) as {
+                action: string;
+                process_key?: string;
+                context_overrides?: Record<string, unknown>;
+                reasoning: string;
+            };
+
+            await logger.log('process_match', { ...matchResult });
+
+            if (matchResult.action === 'reuse' && matchResult.process_key) {
+                status('Running matched process…');
+                debug('chat', `Matched process: ${matchResult.process_key}`);
+
+                let contextResult: Record<string, unknown>;
+                let success = true;
+                try {
+                    const ctx = await runtime.runner.run(matchResult.process_key, {
+                        user_input: userInput,
+                        ...(matchResult.context_overrides || {}),
+                        ...(onQuestion ? { _askQuestion: onQuestion } : {}),
+                    });
+                    contextResult = ctx.getAll();
+                } catch (error) {
+                    debug('chat', `Matched process execution failed: ${error}`);
+                    contextResult = { _error: error instanceof Error ? error.message : String(error) };
+                    success = false;
+                }
+
+                const filteredResult = Object.entries(contextResult)
+                    .filter(([k]) => !k.startsWith('_') && k !== 'user_input')
+                    .reduce((acc, [k, v]) => {
+                        acc[k] = typeof v === 'string' && v.length > 2000 ? v.slice(0, 2000) + '…' : v;
+                        return acc;
+                    }, {} as Record<string, unknown>);
+
+                const scrubbedResult = scrubSecrets(filteredResult) as Record<string, unknown>;
+
+                await logger.log('process_result', { iteration: 1, results: scrubbedResult, source: 'reuse' });
+
+                const matchedProcess = allProcesses.find(p => p.key === matchResult.process_key);
+
+                // Synthesize response
+                const finalResponse = await synthesizeResponse(
+                    llm, userInput, matchResult.reasoning,
+                    [scrubbedResult], [], vaultContext,
+                );
+                await logger.log('response', { response: finalResponse });
+
+                // Fire-and-forget execution log
+                writeExecutionLog({
+                    timestamp: new Date().toISOString(),
+                    chat_id: chatId,
+                    user_input: userInput,
+                    process_source: 'reuse',
+                    process_key: matchResult.process_key,
+                    process_json: matchedProcess ? { key: matchedProcess.key, description: matchedProcess.description } : {},
+                    context_result: scrubbedResult,
+                    success,
+                    outcome_summary: finalResponse.slice(0, 500),
+                    iterations: 1,
+                }).catch(err => debug('chat', `Execution log write failed: ${err}`));
+
+                return finalResponse;
+            }
+        } catch {
+            debug('chat', 'Phase 1 parse failed, falling through to custom pipeline');
+        }
+    }
+
+    // ── PHASE 2: Custom process pipeline ─────────────────────────────
+    // Only runs if Phase 1 chose "custom", no processes exist, or parse failed.
+
     // ── STEP 1: Select catalog nodes ─────────────────────────────────
     status('Selecting capabilities…');
-
-    const llm = await getModelForCapability('reason');
 
     const step1Response = await llm.chat(
         [{
@@ -265,6 +384,7 @@ IMPORTANT CAPABILITIES:
 - To add tags to an existing entity, use the add_tag_* nodes (e.g. add_tag_task).
 
 When the user's request implies creating entities, ALWAYS select the appropriate create_* nodes.
+CRITICAL: Match the entity type precisely. An "event" is NOT a "task" — use create_event for events/appointments/meetings and create_task for todos/action items. Each entity type exists for a reason; never substitute one for another.
 When the user mentions multiple entities, select multiple create_* nodes.
 When the user refers to a content type that doesn't exist yet, select "create_content_type".
 
@@ -364,11 +484,55 @@ Return ONLY the JSON object, no markdown fences.`,
     // In headless mode we don't prompt for follow-ups — proceed with what we have
     const gatheredInfoStr = '';
 
+    // ── Gather existing entity titles for nodes that reference them ──
+    // When find_*, link_*, update_*, complete_*, set_* nodes are selected,
+    // the LLM needs to know exact titles to avoid hallucinating them.
+    const refNodePattern = /^(find_|link_|update_|complete_|set_|add_tag_|search_)/;
+    const referencedTypes = new Set<string>();
+    for (const key of nodeSelection.nodes) {
+        if (refNodePattern.test(key)) {
+            // Extract entity type from node key (e.g. "find_task" → "task", "link_entities" → all)
+            const parts = key.split('_');
+            if (key === 'link_entities') {
+                // link_entities can reference any type — add all
+                for (const et of entityTypes) referencedTypes.add(et.name);
+            } else if (parts.length >= 2) {
+                const typeName = parts.slice(1).join('_');
+                // Validate it's a known entity type (or plural form)
+                const match = entityTypes.find(et => et.name === typeName || et.plural === typeName);
+                if (match) referencedTypes.add(match.name);
+            }
+        }
+    }
+
+    let existingEntitiesBlock = '';
+    if (referencedTypes.size > 0) {
+        const blocks: string[] = [];
+        for (const typeName of referencedTypes) {
+            try {
+                const entities = await listEntities(typeName as Parameters<typeof listEntities>[0]);
+                if (entities.length > 0) {
+                    const titles = entities
+                        .slice(0, 50)
+                        .map(e => `  - "${e.meta.title || e.meta.id}"`)
+                        .join('\n');
+                    blocks.push(`${typeName}:\n${titles}`);
+                }
+            } catch {
+                // Entity type dir may not exist
+            }
+        }
+        if (blocks.length > 0) {
+            existingEntitiesBlock = `\nEXISTING ENTITIES IN VAULT (use these exact titles when referencing existing entities):\n${blocks.join('\n')}\n`;
+        }
+    }
+
     // ── ORCHESTRATION LOOP ────────────────────────────────────────────
     // Iteratively: generate process → run → check completion → repeat
     const MAX_ITERATIONS = 3;
     const allResults: Record<string, unknown>[] = [];
     const allReasonings: string[] = [];
+    const allProcessKeys: string[] = [];
     let remainingWork = userInput;
 
     const examplesStr = EXAMPLE_PROCESSES.map((ex, i) =>
@@ -387,8 +551,7 @@ Return ONLY the JSON object, no markdown fences.`,
             [{
                 role: 'user' as const,
                 content: `Build a Feral process to handle: "${remainingWork}"
-${gatheredInfoStr}${previousResultsStr}
-
+${gatheredInfoStr}${previousResultsStr}${existingEntitiesBlock}
 GLOBAL VARIABLES:
 ${globalsBlock}
 
@@ -414,6 +577,8 @@ PROCESS FORMAT RULES:
 13. To link entities, use link_entities with source_entity_type, source_entity_title, target_entity_type, target_entity_title, and label
 14. To complete/finish an entity, use the complete_* catalog node (e.g. complete_task)
 15. ONLY use configuration keys that appear in the NODE CONFIGURATION DETAILS above — do not invent keys
+16. When referencing existing entities (find_*, link_*, update_*, complete_*, set_*), use EXACT titles from the EXISTING ENTITIES list — do NOT guess or paraphrase entity titles
+17. CRITICAL: Use the correct entity type catalog node. An event (appointment, meeting, scheduled activity) MUST use create_event, NOT create_task. A task (action item, todo) MUST use create_task, NOT create_event. Never substitute one entity type for another.
 
 EXAMPLE PROCESSES:
 ${examplesStr}
@@ -452,6 +617,15 @@ Return ONLY the JSON object, no markdown fences.`,
         // Emit process JSON for visualization
         onProcess?.(processDesign.process);
 
+        // Detect duplicate process — if the LLM generated the same process
+        // as a previous iteration, it's looping and we should stop
+        const processFingerprint = JSON.stringify(processDesign.process);
+        if (allProcessKeys.includes(processFingerprint)) {
+            debug('chat', `Duplicate process detected at iteration ${iteration + 1}, breaking loop`);
+            break;
+        }
+        allProcessKeys.push(processFingerprint);
+
         // ── STEP 3: Execute the generated process ────────────────────
         status(`Running process${iteration > 0 ? ` (step ${iteration + 1})` : ''}…`);
 
@@ -473,13 +647,14 @@ Return ONLY the JSON object, no markdown fences.`,
             });
             contextResult = ctx.getAll();
         } catch (error) {
-            debug('chat', `Process execution failed: ${error}`);
+            debug('chat', `Process execution failed: ${error instanceof Error ? error.stack ?? error.message : error}`);
             contextResult = { _error: error instanceof Error ? error.message : String(error) };
         }
 
         // Filter internal keys and scrub any secrets from context results
+        // Keep 'error' and '_error' visible so completion checker knows about failures
         const iterationResult = Object.entries(contextResult)
-            .filter(([k]) => !k.startsWith('_') && k !== 'user_input')
+            .filter(([k]) => k === '_error' || (!k.startsWith('_') && k !== 'user_input'))
             .reduce((acc, [k, v]) => {
                 acc[k] = typeof v === 'string' && v.length > 2000 ? v.slice(0, 2000) + '…' : v;
                 return acc;
@@ -548,21 +723,59 @@ Return ONLY the JSON object, no markdown fences.`,
     // ── STEP 5: Synthesize response ──────────────────────────────────
     status('Composing response…');
 
+    const nodesUsed = selectedNodes
+        .filter(Boolean)
+        .map(n => `- ${n!.key}: ${n!.description || n!.name}`);
+
+    const finalResponse = await synthesizeResponse(
+        llm, userInput, nodeSelection.reasoning,
+        allResults, nodesUsed, vaultContext,
+    );
+    await logger.log('response', { response: finalResponse });
+
+    // Fire-and-forget execution log
+    const lastProcessDesign = allReasonings.length > 0
+        ? { reasoning: allReasonings, iterations: allReasonings.length }
+        : {};
+    writeExecutionLog({
+        timestamp: new Date().toISOString(),
+        chat_id: chatId,
+        user_input: userInput,
+        process_source: 'custom',
+        process_key: 'chat.generated',
+        process_json: lastProcessDesign,
+        context_result: allResults.length > 0 ? allResults[allResults.length - 1] : {},
+        success: !allResults.some(r => r._error),
+        outcome_summary: finalResponse.slice(0, 500),
+        iterations: allReasonings.length,
+    }).catch(err => debug('chat', `Execution log write failed: ${err}`));
+
+    return finalResponse;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SYNTHESIS HELPER
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function synthesizeResponse(
+    llm: LLMProvider,
+    userInput: string,
+    reasoning: string,
+    results: Record<string, unknown>[],
+    nodesUsed: string[],
+    vaultContext: string,
+): Promise<string> {
     const synthesisPrompt = `The user said: "${userInput}"
 
 WHAT DOBBI DID:
-Reasoning: ${nodeSelection.reasoning}
+Reasoning: ${reasoning}
 
-${allResults.length} process step(s) executed:
-${allReasonings.map((r, i) => `Step ${i + 1}: ${r}`).join('\n')}
+${results.length} process step(s) executed.
 
-Nodes used:
-${selectedNodes.filter(Boolean).map(n => `- ${n!.key}: ${n!.description || n!.name}`).join('\n')}
+${nodesUsed.length > 0 ? `Nodes used:\n${nodesUsed.join('\n')}\n` : ''}Results:
+${JSON.stringify(results, null, 2)}
 
-Results:
-${JSON.stringify(allResults, null, 2)}
-
-${allResults.some(r => r._error) ? `Note: Some steps encountered errors.` : ''}
+${results.some(r => r._error) ? `Note: Some steps encountered errors.` : ''}
 
 RESPONSE GUIDELINES:
 - Summarise what was done concretely (created X, linked Y to Z, completed W)
@@ -572,7 +785,7 @@ RESPONSE GUIDELINES:
 - If there were errors, acknowledge honestly and suggest alternatives
 - If the results suggest follow-up actions, briefly mention them`;
 
-    const step5Response = await llm.chat(
+    const response = await llm.chat(
         [{ role: 'user' as const, content: synthesisPrompt }],
         {
             systemPrompt: createDobbiSystemPrompt(vaultContext || ''),
@@ -580,9 +793,7 @@ RESPONSE GUIDELINES:
         },
     );
 
-    const finalResponse = step5Response.trim();
-    await logger.log('response', { response: finalResponse });
-    return finalResponse;
+    return response.trim();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -664,88 +875,6 @@ function scrubSecrets(obj: unknown): unknown {
     return obj;
 }
 
-/**
- * Strip markdown fences, fix common LLM JSON mistakes, and trim whitespace.
- */
-function cleanJson(raw: string): string {
-    let s = raw.trim();
-    // Remove ```json ... ``` or ``` ... ```
-    s = s.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
-    // Fix trailing commas before } or ] (very common LLM error)
-    s = s.replace(/,\s*([\}\]])/g, '$1');
-    // Fix missing closing quotes: "key": "value\n  →  "key": "value"\n
-    s = s.replace(/":\s*"([^"]*?)(\n)/g, '": "$1"$2');
-    return s.trim();
-}
-
-/**
- * Try multiple strategies to extract a JSON object from an LLM response.
- * Returns parsed object or throws.
- */
-function parseJsonResponse(raw: string): Record<string, unknown> {
-    // Strategy 1: clean and parse directly
-    const cleaned = cleanJson(raw);
-    try {
-        return JSON.parse(cleaned);
-    } catch {
-        // continue to fallback strategies
-    }
-
-    // Strategy 2: extract the outermost { ... } block (handles preamble/postamble text)
-    const firstBrace = cleaned.indexOf('{');
-    if (firstBrace >= 0) {
-        let depth = 0;
-        let inString = false;
-        let escape = false;
-        for (let i = firstBrace; i < cleaned.length; i++) {
-            const ch = cleaned[i];
-            if (escape) { escape = false; continue; }
-            if (ch === '\\' && inString) { escape = true; continue; }
-            if (ch === '"') { inString = !inString; continue; }
-            if (inString) continue;
-            if (ch === '{') depth++;
-            if (ch === '}') {
-                depth--;
-                if (depth === 0) {
-                    try {
-                        return JSON.parse(cleaned.slice(firstBrace, i + 1));
-                    } catch {
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    // Strategy 3: try to fix truncated JSON by closing open braces/brackets
-    try {
-        let fixed = cleaned;
-        // Count unclosed braces and brackets
-        let braces = 0, brackets = 0;
-        let inStr = false, esc = false;
-        for (const ch of fixed) {
-            if (esc) { esc = false; continue; }
-            if (ch === '\\' && inStr) { esc = true; continue; }
-            if (ch === '"') { inStr = !inStr; continue; }
-            if (inStr) continue;
-            if (ch === '{') braces++;
-            if (ch === '}') braces--;
-            if (ch === '[') brackets++;
-            if (ch === ']') brackets--;
-        }
-        // Remove any trailing partial key/value (after last comma or opening brace)
-        fixed = fixed.replace(/,\s*"[^"]*"?\s*:?\s*"?[^"]*$/, '');
-        fixed = fixed.replace(/,\s*$/, '');
-        // Close open brackets and braces
-        for (let i = 0; i < brackets; i++) fixed += ']';
-        for (let i = 0; i < braces; i++) fixed += '}';
-        return JSON.parse(fixed);
-    } catch {
-        // give up
-    }
-
-    throw new Error(`Invalid JSON: ${cleaned.slice(0, 200)}…`);
-}
 
 /**
  * Ask a follow-up question using inquirer.
